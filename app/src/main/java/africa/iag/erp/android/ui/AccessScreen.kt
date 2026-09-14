@@ -23,6 +23,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -41,12 +42,17 @@ import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.PAGE_WILDCARD_KEY
 import africa.iag.erp.core.RoleDefinition
 import africa.iag.erp.core.newRoleId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccessScreen(store: ErpStore, onBack: () -> Unit) {
     rememberStoreTick(store)
     var tab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { store.refreshDirectory() }
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -86,13 +92,16 @@ private fun RolesPanel(store: ErpStore) {
     var error by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Text("Custom roles", fontWeight = FontWeight.Bold)
-        Text("Grant CRUD and optional apps. Built-in desks stay on the same SoD allow-lists as web ERP.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Workspace roles", fontWeight = FontWeight.Bold)
+        Text("Loaded from the workspace after sign-in.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
-        store.customRoles.forEach { role ->
-            Text("• ${role.name} — ${role.description.ifBlank { "custom" }}", modifier = Modifier.padding(bottom = 4.dp))
+        store.roles.forEach { role ->
+            Text(
+                "• ${role.name} — ${if (role.system) "system" else role.description.ifBlank { "custom" }}",
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
         }
-        if (store.customRoles.isEmpty()) Text("No custom roles yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (store.roles.isEmpty()) Text("No roles yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(16.dp))
         Text("Create custom role", fontWeight = FontWeight.Bold)
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
@@ -142,7 +151,7 @@ private fun UsersPanel(store: ErpStore) {
     var username by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("Viewer") }
-    var password by remember { mutableStateOf("iagdemo") }
+    var password by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
@@ -173,6 +182,7 @@ private fun UsersPanel(store: ErpStore) {
                 if (error == null) {
                     username = ""
                     name = ""
+                    password = ""
                 }
             },
             modifier = Modifier.fillMaxWidth(),

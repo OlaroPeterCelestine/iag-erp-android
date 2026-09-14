@@ -75,26 +75,47 @@ data class RoleDefinition(
 
     companion object {
         fun fromJson(j: Map<String, Any?>): RoleDefinition {
-            val pages = linkedMapOf<String, Crud>()
-            val raw = j["pagePermissions"]
-            if (raw is Map<*, *>) {
-                for ((k, v) in raw) {
-                    pages[k.toString()] = Crud.fromFlags(
-                        if (v is Map<*, *>) v.entries.associate { it.key.toString() to it.value } else null,
-                    )
-                }
-            }
             val id = (j["id"] as? String)?.trim().orEmpty()
             return RoleDefinition(
                 id = if (id.isNotEmpty()) id else newRoleId(),
                 name = (j["name"] as? String)?.trim().orEmpty(),
                 description = (j["description"] as? String)?.trim().orEmpty(),
                 crud = Crud.fromFlags(j),
-                system = j["system"] == true,
-                pagePermissions = pages,
+                system = jsonFlagBool(j["system"]),
+                pagePermissions = parsePagePermissions(j["pagePermissions"]),
             )
         }
     }
+}
+
+fun jsonFlagBool(value: Any?): Boolean = when (value) {
+    is Boolean -> value
+    is Number -> value.toInt() != 0
+    is String -> {
+        val t = value.trim().lowercase()
+        t == "true" || t == "1" || t == "yes"
+    }
+    else -> false
+}
+
+fun parsePagePermissions(value: Any?): Map<String, Crud> {
+    val raw: Map<*, *>? = when (value) {
+        is Map<*, *> -> value
+        is String -> try {
+            MiniJson.parse(value) as? Map<*, *>
+        } catch (_: Exception) {
+            null
+        }
+        else -> null
+    }
+    if (raw == null) return emptyMap()
+    val pages = linkedMapOf<String, Crud>()
+    for ((k, nested) in raw) {
+        pages[k.toString()] = Crud.fromFlags(
+            if (nested is Map<*, *>) nested.entries.associate { it.key.toString() to it.value } else null,
+        )
+    }
+    return pages
 }
 
 data class WorkspaceUser(
@@ -179,6 +200,25 @@ fun mergeStoredRoles(stored: List<RoleDefinition>): List<RoleDefinition> {
             !isBuiltInRoleName(it.name)
     }
     return systemRoleDefinitions() + custom
+}
+
+/** Keep Postgres roles (including system rows and their page matrix) as the catalog. */
+fun adoptApiRoles(apiRoles: List<RoleDefinition>): List<RoleDefinition> {
+    val fromApi = apiRoles.filter { it.name.trim().isNotEmpty() }
+    if (fromApi.isEmpty()) return systemRoleDefinitions()
+    val seen = linkedSetOf<String>()
+    val out = mutableListOf<RoleDefinition>()
+    for (role in fromApi) {
+        val key = normalizeRole(role.name)
+        if (!seen.add(key)) continue
+        out.add(role)
+    }
+    for (local in systemRoleDefinitions()) {
+        val key = normalizeRole(local.name)
+        if (!seen.add(key)) continue
+        out.add(local)
+    }
+    return out
 }
 
 data class DemoAccount(

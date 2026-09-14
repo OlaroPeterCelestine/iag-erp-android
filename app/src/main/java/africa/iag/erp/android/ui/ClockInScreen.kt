@@ -8,6 +8,7 @@ import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +43,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import africa.iag.erp.android.ui.theme.DeskRow
 import africa.iag.erp.android.ui.theme.IagCard
+import africa.iag.erp.android.ui.theme.IagEmptyHint
+import africa.iag.erp.android.ui.theme.IagGroupedCard
+import africa.iag.erp.android.ui.theme.IagListRow
 import africa.iag.erp.android.ui.theme.SectionLabel
 import africa.iag.erp.android.ui.theme.StatusChip
 import africa.iag.erp.android.ui.theme.iagTopBarColors
@@ -111,22 +115,28 @@ fun ClockInPanel(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text(
-                store.user?.name ?: "Staff",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 22.sp,
-            )
-            Text(store.user?.role ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(
-                if (open == null) {
-                    "No open check-in today."
-                } else {
-                    "Checked in at ${recordField(open, "clockIn", "Clock in")} · ${open.subtitle}"
-                },
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            IagGroupedCard {
+                IagListRow(divider = false) {
+                    Column {
+                        Text(
+                            if (open == null) "Clocked out" else "Clocked in",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 22.sp,
+                        )
+                        Text(store.user?.name ?: "Staff", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            if (open == null) {
+                                "Capture GPS, then clock in at a site."
+                            } else {
+                                "Since ${recordField(open, "clockIn", "Clock in")} · ${open.subtitle}"
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
         }
         item {
             IagCard {
@@ -221,18 +231,23 @@ fun ClockInPanel(
             }
         }
         item { SectionLabel("My punches") }
-        if (punches.isEmpty()) {
-            item { Text("No attendance rows for this login yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        } else {
-            items(punches, key = { it.id }) { rec ->
-                IagCard(onClick = { onOpenRecord(rec.id) }) {
-                    val clockOut = recordField(rec, "clockOut", "Clock out").ifEmpty { "open" }
-                    DeskRow(
-                        title = rec.title,
-                        subtitle = "${recordField(rec, "clockIn", "Clock in")}–$clockOut",
-                        icon = Icons.Outlined.Schedule,
-                        status = rec.status,
-                    )
+        item {
+            val shown = punches.take(12)
+            IagGroupedCard {
+                if (shown.isEmpty()) {
+                    IagEmptyHint("No attendance rows for this login yet.")
+                } else {
+                    shown.forEachIndexed { index, rec ->
+                        IagListRow(onClick = { onOpenRecord(rec.id) }, divider = index < shown.lastIndex) {
+                            val clockOut = recordField(rec, "clockOut", "Clock out").ifEmpty { "open" }
+                            DeskRow(
+                                title = rec.title,
+                                subtitle = "${recordField(rec, "clockIn", "Clock in")}–$clockOut",
+                                icon = Icons.Outlined.Schedule,
+                                status = rec.status,
+                            )
+                        }
+                    }
                 }
             }
         }

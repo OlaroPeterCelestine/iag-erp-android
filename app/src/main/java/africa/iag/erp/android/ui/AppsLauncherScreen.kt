@@ -16,9 +16,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import africa.iag.erp.android.ui.theme.AppTile
 import africa.iag.erp.android.ui.theme.DeskRow
-import africa.iag.erp.android.ui.theme.IagCard
-import africa.iag.erp.android.ui.theme.WelcomeCard
+import africa.iag.erp.android.ui.theme.IagGroupedCard
+import africa.iag.erp.android.ui.theme.IagListRow
 import africa.iag.erp.android.ui.theme.QuickActionsGrid
+import africa.iag.erp.android.ui.theme.SectionLabel
+import africa.iag.erp.android.ui.theme.WelcomeCard
 import africa.iag.erp.android.ui.theme.rememberStoreTick
 import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.QuickAction
@@ -46,12 +48,13 @@ fun AppsLauncherScreen(
         item(span = { GridItemSpan(2) }) {
             WelcomeCard(
                 name = firstName,
-                subtitle = "Open Finance, Procurement, Production, Security, or another app.",
+                subtitle = "Pick an app to start work.",
                 stats = store.welcomeStats,
             )
         }
         if (store.launcherQuickActions.isNotEmpty()) {
             item(span = { GridItemSpan(2) }) {
+                SectionLabel("Shortcuts")
                 QuickActionsGrid(
                     actions = store.launcherQuickActions,
                     pending = store.pendingApprovals.size,
@@ -61,21 +64,19 @@ fun AppsLauncherScreen(
                 )
             }
         }
+        item(span = { GridItemSpan(2) }) { SectionLabel("Apps") }
         items(store.visibleSuiteApps, key = { it.id }) { app ->
             AppTile(app) { store.openApp(app.id) }
         }
         item(span = { GridItemSpan(2) }) {
-            Spacer(Modifier.height(4.dp))
-        }
-        item(span = { GridItemSpan(2) }) {
-            IagCard(onClick = onOpenProfile) {
-                DeskRow(title = "Account", subtitle = "Profile, theme, and sign out", icon = Icons.Outlined.Person)
-            }
-        }
-        if (store.isAdmin) {
-            item(span = { GridItemSpan(2) }) {
-                IagCard(onClick = onOpenAccess) {
-                    DeskRow(title = "Users & roles", subtitle = "Custom roles and workspace users", icon = Icons.Outlined.Shield)
+            IagGroupedCard {
+                IagListRow(onClick = onOpenProfile, divider = store.isAdmin) {
+                    DeskRow(title = "Account", subtitle = "Profile, theme, and sign out", icon = Icons.Outlined.Person)
+                }
+                if (store.isAdmin) {
+                    IagListRow(onClick = onOpenAccess, divider = false) {
+                        DeskRow(title = "Users & roles", subtitle = "Custom roles and workspace users", icon = Icons.Outlined.Shield)
+                    }
                 }
             }
         }

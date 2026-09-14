@@ -31,10 +31,12 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Widgets
 import africa.iag.erp.android.ui.theme.DeskRow
-import africa.iag.erp.android.ui.theme.IagCard
+import africa.iag.erp.android.ui.theme.IagGroupedCard
+import africa.iag.erp.android.ui.theme.IagListRow
 import africa.iag.erp.android.ui.theme.SectionLabel
 import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.rememberStoreTick
+import africa.iag.erp.core.APP_NAME
 import africa.iag.erp.core.APP_VERSION
 import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.departmentGroups
@@ -50,42 +52,48 @@ fun MoreScreen(
     onSwitchApp: () -> Unit = {},
 ) {
     rememberStoreTick(store)
-    LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
         item { SectionLabel("Apps") }
         item {
-            IagCard(onClick = onSwitchApp) {
-                DeskRow(
-                    title = "Switch app",
-                    subtitle = store.activeSuiteApp?.let { "You are in ${it.label}." } ?: "Open another IAG tool.",
-                    icon = Icons.Outlined.Apps,
-                )
+            IagGroupedCard {
+                IagListRow(onClick = onSwitchApp, divider = false) {
+                    DeskRow(
+                        title = "Switch app",
+                        subtitle = store.activeSuiteApp?.let { "You are in ${it.label}." } ?: "Open another IAG tool.",
+                        icon = Icons.Outlined.Apps,
+                    )
+                }
             }
         }
         workspaceGroups.forEach { group ->
             val tools = store.visibleWorkspaceTools.filter { it.group == group }
             if (tools.isNotEmpty()) {
-                item { SectionLabel(group) }
-                items(tools, key = { it.id }) { tool ->
-                    IagCard(onClick = { onOpenTool(tool.id) }) {
-                        DeskRow(
-                            title = tool.label,
-                            subtitle = tool.description,
-                            icon = Icons.Outlined.Widgets,
-                        )
+                item {
+                    SectionLabel(group)
+                    IagGroupedCard {
+                        tools.forEachIndexed { index, tool ->
+                            IagListRow(onClick = { onOpenTool(tool.id) }, divider = index < tools.lastIndex) {
+                                DeskRow(
+                                    title = tool.label,
+                                    subtitle = tool.description,
+                                    icon = Icons.Outlined.Widgets,
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
         item { SectionLabel("Account") }
         item {
-            IagCard(onClick = onOpenProfile) {
-                DeskRow(title = "Profile", subtitle = "Name, theme, and sign out", icon = Icons.Outlined.Person)
-            }
-        }
-        if (store.isAdmin) {
-            item {
-                IagCard(onClick = onOpenAccess) {
-                    DeskRow(title = "Users & roles", subtitle = "Custom roles and workspace users", icon = Icons.Outlined.Shield)
+            IagGroupedCard {
+                IagListRow(onClick = onOpenProfile, divider = store.isAdmin) {
+                    DeskRow(title = "Profile", subtitle = "Name, theme, and sign out", icon = Icons.Outlined.Person)
+                }
+                if (store.isAdmin) {
+                    IagListRow(onClick = onOpenAccess, divider = false) {
+                        DeskRow(title = "Users & roles", subtitle = "Custom roles and workspace users", icon = Icons.Outlined.Shield)
+                    }
                 }
             }
         }
@@ -222,7 +230,7 @@ fun WorkspaceToolScreen(
                 }
                 "release-notes" -> {
                     item {
-                        Text("ERP Android $APP_VERSION", fontWeight = FontWeight.Bold)
+                        Text("$APP_NAME $APP_VERSION", fontWeight = FontWeight.Bold)
                     }
                     item {
                         Text(
@@ -243,7 +251,7 @@ fun WorkspaceToolScreen(
                     }
                 }
                 "system-health" -> {
-                    item { Stat("App", "ERP Android $APP_VERSION") }
+                    item { Stat("App", "$APP_NAME $APP_VERSION") }
                     item { Stat("Role", store.user?.role ?: "—") }
                     item { Stat("Records", "${store.records.size}") }
                     item { Stat("Roles", "${store.roles.size}") }
@@ -309,5 +317,5 @@ private val erpQnA = listOf(
     "Where is Banking?" to "Home or Departments → Treasury → Banking. Features include bank accounts, transfers, statements, and reconciliations.",
     "Who can clock in?" to "Every signed-in login, including clerk, viewer, and contractor. You do not need the HR desk.",
     "Who can approve?" to "QS, Stores, Procurement, HR, HOD, PM, Accounts, GM, CEO, Finance, and Administrators. Clerk and Viewer cannot.",
-    "Demo password?" to "iagdemo. Try admin to see every desk.",
+    "How do I sign in?" to "Use Forgot password on the sign-in screen to create a password for a demo username such as admin.",
 )

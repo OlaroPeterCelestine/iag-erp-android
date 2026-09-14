@@ -8,7 +8,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RbacTest {
-    private fun store(): ErpStore = ErpStore(persistence = MemoryKeyValueStore()).also { it.load() }
+    private val testPassword = "unit-test-login"
+
+    private fun store(): ErpStore = ErpStore(persistence = MemoryKeyValueStore()).also {
+        it.load()
+        it.seedTestPasswords(testPassword)
+    }
 
     @Test
     fun adminSeesEveryDepartmentIncludingExplicitGrantApps() {
@@ -76,11 +81,11 @@ class RbacTest {
     @Test
     fun loginEnforcesDepartmentGrantsAndWorkflowSod() {
         val s = store()
-        assertEquals("Unknown user.", s.login("nobody", "iagdemo"))
-        assertEquals("Your role cannot open that app.", s.login("viewer", "iagdemo", "banking"))
+        assertEquals("Unknown user.", s.login("nobody", testPassword))
+        assertEquals("Your role cannot open that app.", s.login("viewer", testPassword, "banking"))
         assertFalse(s.isSignedIn)
 
-        assertNull(s.login("viewer", "iagdemo"))
+        assertNull(s.login("viewer", testPassword))
         assertEquals("Viewer", s.user?.role)
         assertFalse(s.canOpen("banking"))
         assertTrue(s.canOpen("reports"))
@@ -89,8 +94,8 @@ class RbacTest {
         assertTrue(s.visibleModules.any { it.id == "reports" })
         s.logout()
 
-        assertEquals("Your role cannot open that app.", s.login("contractor", "iagdemo", "banking"))
-        assertNull(s.login("contractor", "iagdemo"))
+        assertEquals("Your role cannot open that app.", s.login("contractor", testPassword, "banking"))
+        assertNull(s.login("contractor", testPassword))
         assertEquals("projects", s.activeDepartmentId)
         assertEquals("projects", s.activeAppId)
         assertTrue(s.canOpen("contract-manager"))
@@ -99,7 +104,7 @@ class RbacTest {
         assertEquals("projects", s.activeDepartmentId)
         s.logout()
 
-        assertNull(s.login("clerk", "iagdemo"))
+        assertNull(s.login("clerk", testPassword))
         assertTrue(s.canCreate("sales", "Sales Invoices"))
         assertFalse(s.canEdit("sales", "Sales Invoices"))
         assertFalse(s.canDelete("sales", "Sales Invoices"))
@@ -122,7 +127,7 @@ class RbacTest {
         assertNotNull(s.deleteRecord(draft))
         s.logout()
 
-        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.login("admin", testPassword))
         assertTrue(s.canOpen("fleet"))
         assertTrue(s.canDelete("sales", "Sales Invoices"))
         assertTrue(s.canApprove)
@@ -157,7 +162,7 @@ class RbacTest {
         val s = store()
         assertNotNull(s.saveRole(RoleDefinition(id = "x", name = "Lab Tech")))
 
-        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.login("admin", testPassword))
         assertNull(
             s.saveRole(
                 RoleDefinition(
@@ -172,10 +177,10 @@ class RbacTest {
                 ),
             ),
         )
-        assertNull(s.saveWorkspaceUser(username = "labtech", name = "Lina Lab", role = "Lab Tech", password = "iagdemo"))
+        assertNull(s.saveWorkspaceUser(username = "labtech", name = "Lina Lab", role = "Lab Tech", password = testPassword))
         s.logout()
 
-        assertNull(s.login("labtech", "iagdemo"))
+        assertNull(s.login("labtech", testPassword))
         assertEquals("Lab Tech", s.user?.role)
         assertTrue(s.canOpen("lab"))
         assertFalse(s.canOpen("banking"))
@@ -200,13 +205,13 @@ class RbacTest {
             }
         }
         val s = store()
-        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.login("admin", testPassword))
         assertEquals(modules.size, s.visibleModules.size)
         assertTrue(canAccessSpecialNav("Administrator", "analytics"))
         assertTrue(s.visibleWorkspaceTools.any { it.id == "trace" })
         assertTrue(s.visibleWorkspaceTools.any { it.id == "analytics" })
         s.logout()
-        assertNull(s.login("viewer", "iagdemo"))
+        assertNull(s.login("viewer", testPassword))
         assertTrue(canAccessSpecialNav("Viewer", "guides"))
         assertFalse(canAccessSpecialNav("Viewer", "analytics"))
         assertTrue(s.visibleWorkspaceTools.any { it.id == "trace" })
@@ -227,7 +232,7 @@ class RbacTest {
         assertTrue(canCreateIn("Viewer", "clock-in"))
 
         val s = store()
-        assertNull(s.login("clerk", "iagdemo"))
+        assertNull(s.login("clerk", testPassword))
         assertTrue(s.canOpen("clock-in"))
         assertFalse(s.canOpen("payroll"))
         assertTrue(s.canClockIn)
@@ -249,13 +254,13 @@ class RbacTest {
         assertNull(s.openAttendanceToday())
         s.logout()
 
-        assertNull(s.login("viewer", "iagdemo"))
+        assertNull(s.login("viewer", testPassword))
         assertTrue(s.canOpen("clock-in"))
         assertTrue(s.visibleModules.any { it.id == "clock-in" })
         assertTrue(s.punch("in", HQ_LATITUDE, HQ_LONGITUDE, 8.0)?.contains("Checked in") == true)
         s.logout()
 
-        assertNull(s.login("contractor", "iagdemo"))
+        assertNull(s.login("contractor", testPassword))
         assertTrue(s.canOpen("clock-in"))
         assertTrue(s.canOpen("projects"))
         assertFalse(s.canOpen("payroll"))
@@ -265,18 +270,25 @@ class RbacTest {
     fun suiteAppsAreSeparateFullTools() {
         assertEquals(
             listOf(
-                "finance", "fleet", "hr", "logistics", "procurement", "production",
-                "projects", "quality", "records", "requests", "sales", "security",
+                "contracts", "crm", "dms", "finance", "fleet", "hr", "logistics", "pos",
+                "procurement", "production", "projects", "quality", "requests", "sales", "security",
             ).sorted(),
             suiteApps.map { it.id }.sorted(),
         )
+        assertTrue(canOpenSuiteApp("Administrator", "crm"))
+        assertTrue(canOpenSuiteApp("Administrator", "pos"))
+        assertTrue(canOpenSuiteApp("Administrator", "contracts"))
+        assertTrue(canOpenSuiteApp("Administrator", "dms"))
+        assertTrue(canOpenSuiteApp("Administrator", "fleet"))
+        assertEquals("dms", suiteAppById("records")?.id)
+        assertEquals("contracts", suiteAppById("contract-manager")?.id)
         assertTrue(canOpenSuiteApp("Procurement", "procurement"))
         assertFalse(canOpenSuiteApp("Procurement", "security"))
         assertTrue(canOpenSuiteApp("HR", "hr"))
         assertFalse(canOpenSuiteApp("Viewer", "security"))
 
         val s = store()
-        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.login("admin", testPassword))
         assertNull(s.activeAppId)
         assertEquals(suiteApps.size, s.visibleSuiteApps.size)
         s.openApp("finance")
@@ -290,25 +302,25 @@ class RbacTest {
         assertNull(s.activeAppId)
         s.logout()
 
-        assertNull(s.login("procurement", "iagdemo"))
+        assertNull(s.login("procurement", testPassword))
         assertEquals("procurement", s.activeAppId)
         assertTrue(s.appModules.any { it.id == "purchases" })
         assertFalse(s.appModules.any { it.id == "banking" })
         s.logout()
 
-        assertNull(s.login("hr", "iagdemo"))
+        assertNull(s.login("hr", testPassword))
         assertEquals("hr", s.activeAppId)
         s.logout()
 
-        assertEquals("Your role cannot open that app.", s.login("clerk", "iagdemo", "security"))
-        assertNull(s.login("clerk", "iagdemo"))
+        assertEquals("Your role cannot open that app.", s.login("clerk", testPassword, "security"))
+        assertNull(s.login("clerk", testPassword))
         assertEquals("finance", s.activeAppId)
     }
 
     @Test
     fun quickActionsFollowAppAndRbac() {
         val s = store()
-        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.login("admin", testPassword))
         assertTrue(s.launcherQuickActions.any { it.id == "clock" })
         assertTrue(s.launcherQuickActions.any { it.id == "approvals" })
         s.openApp("finance")
@@ -321,9 +333,20 @@ class RbacTest {
         s.openApp("sales")
         assertTrue(s.homeQuickActions.any { it.id == "invoice" })
         assertTrue(s.homeQuickActions.any { it.id == "customer" })
+        assertFalse(s.homeQuickActions.any { it.id == "lead" })
+        s.openApp("crm")
+        assertTrue(s.homeQuickActions.any { it.id == "lead" })
+        s.openApp("pos")
+        assertTrue(s.homeQuickActions.any { it.id == "ticket" })
+        s.openApp("contracts")
+        assertTrue(s.homeQuickActions.any { it.id == "contract" })
+        s.openApp("fleet")
+        assertTrue(s.homeQuickActions.any { it.id == "vehicle" })
+        s.openApp("dms")
+        assertTrue(s.homeQuickActions.any { it.id == "folder" })
         s.logout()
 
-        assertNull(s.login("viewer", "iagdemo"))
+        assertNull(s.login("viewer", testPassword))
         assertEquals("finance", s.activeAppId)
         assertTrue(s.homeQuickActions.any { it.id == "clock" })
         assertTrue(s.homeQuickActions.any { it.id == "reports" })
@@ -331,7 +354,7 @@ class RbacTest {
         assertFalse(s.homeQuickActions.any { it.id == "approvals" })
         s.logout()
 
-        assertNull(s.login("procurement", "iagdemo"))
+        assertNull(s.login("procurement", testPassword))
         assertTrue(s.homeQuickActions.any { it.id == "po" })
         assertFalse(s.homeQuickActions.any { it.id == "invoice" })
     }
@@ -339,7 +362,7 @@ class RbacTest {
     @Test
     fun welcomeStatsShowLiveCounts() {
         val s = store()
-        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.login("admin", testPassword))
         assertNull(s.activeAppId)
         assertEquals(listOf("apps", "records", "todo", "clock"), s.welcomeStats.map { it.id })
         assertEquals("${s.visibleSuiteApps.size}", s.welcomeStats.first { it.id == "apps" }.value)
@@ -349,9 +372,57 @@ class RbacTest {
         assertEquals("${s.appModules.size}", s.welcomeStats.first { it.id == "desks" }.value)
         s.logout()
 
-        assertNull(s.login("viewer", "iagdemo"))
+        assertNull(s.login("viewer", testPassword))
         assertFalse(s.welcomeStats.any { it.id == "todo" })
         assertTrue(s.welcomeStats.any { it.id == "desks" })
         assertTrue(s.welcomeStats.any { it.id == "clock" })
+    }
+
+    @Test
+    fun passwordsAreHashedAndHaveNoSharedDefault() {
+        val persistence = MemoryKeyValueStore()
+        val s = ErpStore(persistence = persistence)
+        s.load()
+        assertEquals("No password set. Use Forgot password to create one.", s.login("admin", "anything-at-all"))
+        assertNull(s.resetPassword("admin", testPassword, testPassword))
+        assertNull(s.login("admin", testPassword))
+        val raw = persistence.get(STORE_KEY) ?: ""
+        assertFalse(raw.contains(testPassword))
+        assertTrue(raw.contains(passwordDigest("admin", testPassword)))
+    }
+
+    @Test
+    fun legacyPlaintextPasswordsAreMigratedOnLoad() {
+        val persistence = MemoryKeyValueStore()
+        val legacy = "legacy-secret"
+        persistence.put(STORE_KEY, """{"passwords":{"admin":"$legacy"}}""")
+        val s = ErpStore(persistence = persistence)
+        s.load()
+        assertNull(s.login("admin", legacy))
+        val raw = persistence.get(STORE_KEY) ?: ""
+        assertFalse(raw.contains(legacy))
+        assertTrue(raw.contains(passwordDigest("admin", legacy)))
+    }
+
+    @Test
+    fun adoptApiRolesKeepsDatabaseSystemRoles() {
+        val api = listOf(
+            RoleDefinition(id = "role-admin-db", name = "Administrator", crud = Crud.full, system = true),
+            RoleDefinition(
+                id = "r1",
+                name = "Field Clerk",
+                crud = Crud(view = true, create = true, edit = false, delete = false),
+                system = false,
+                pagePermissions = mapOf("sales" to Crud(view = true, create = true, edit = false, delete = false)),
+            ),
+        )
+        val adopted = adoptApiRoles(api)
+        assertEquals("role-admin-db", findRoleDefinition(adopted, "Administrator")?.id)
+        assertEquals(true, findRoleDefinition(adopted, "Field Clerk")?.crud?.create)
+        assertEquals(true, findRoleDefinition(adopted, "Field Clerk")?.pagePermissions?.get("sales")?.view)
+        assertNotNull(findRoleDefinition(adopted, "Clerk"))
+        val merged = mergeStoredRoles(api)
+        assertTrue(findRoleDefinition(merged, "Administrator")?.id != "role-admin-db")
+        assertEquals("r1", findRoleDefinition(merged, "Field Clerk")?.id)
     }
 }

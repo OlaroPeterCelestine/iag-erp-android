@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +37,9 @@ import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.formatMoney
 import africa.iag.erp.core.newId
 import africa.iag.erp.core.todayIsoDate
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +51,7 @@ fun RecordDetailScreen(store: ErpStore, recordId: String, onBack: () -> Unit) {
         return
     }
     var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -85,22 +90,62 @@ fun RecordDetailScreen(store: ErpStore, recordId: String, onBack: () -> Unit) {
             if (store.isOpenStatus(record.status).not() && record.status.equals("Draft", true) &&
                 (store.canCreate(record.moduleId, record.entity) || store.canEdit(record.moduleId, record.entity))
             ) {
-                Button(onClick = { message = store.submitRecord(record) ?: "Submitted." }, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                if (store.remoteSession) store.submitRecordAsync(record) else store.submitRecord(record)
+                            }
+                            message = result ?: "Submitted."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Submit")
                 }
             }
             if (store.canApproveModule(record.moduleId) && store.isOpenStatus(record.status)) {
-                Button(onClick = { message = store.approveRecord(record) ?: "Approved." }, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                if (store.remoteSession) store.approveRecordAsync(record) else store.approveRecord(record)
+                            }
+                            message = result ?: "Approved."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Approve")
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { message = store.rejectRecord(record) ?: "Rejected." }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                if (store.remoteSession) store.rejectRecordAsync(record) else store.rejectRecord(record)
+                            }
+                            message = result ?: "Rejected."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Reject")
                 }
             }
             if (store.canVoid(record.moduleId)) {
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { message = store.voidRecord(record) ?: "Voided." }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                if (store.remoteSession) store.voidRecordAsync(record) else store.voidRecord(record)
+                            }
+                            message = result ?: "Voided."
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Void")
                 }
             }
@@ -108,8 +153,12 @@ fun RecordDetailScreen(store: ErpStore, recordId: String, onBack: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = {
-                        val err = store.deleteRecord(record)
-                        if (err == null) onBack() else message = err
+                        scope.launch {
+                            val err = withContext(Dispatchers.IO) {
+                                if (store.remoteSession) store.deleteRecordAsync(record) else store.deleteRecord(record)
+                            }
+                            if (err == null) onBack() else message = err
+                        }
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Delete") }

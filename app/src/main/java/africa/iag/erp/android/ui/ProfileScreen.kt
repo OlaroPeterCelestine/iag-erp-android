@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -29,8 +30,12 @@ import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.nextThemeMode
 import africa.iag.erp.android.ui.theme.themeModeLabel
 import africa.iag.erp.android.ui.theme.rememberStoreTick
+import africa.iag.erp.core.APP_NAME
 import africa.iag.erp.core.APP_VERSION
 import africa.iag.erp.core.ErpStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +47,7 @@ fun ProfileScreen(store: ErpStore, onBack: () -> Unit, onSignedOut: () -> Unit) 
     var phone by remember { mutableStateOf(user?.phone ?: "") }
     var title by remember { mutableStateOf(user?.title ?: "") }
     var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -57,7 +63,14 @@ fun ProfileScreen(store: ErpStore, onBack: () -> Unit, onSignedOut: () -> Unit) 
     ) { padding ->
         Column(Modifier.padding(padding).padding(16.dp)) {
             Text(user?.role ?: "", fontWeight = FontWeight.Bold)
-            Text("ERP Android $APP_VERSION", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("$APP_NAME $APP_VERSION", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (store.remoteSession) "Signed in." else "On this device.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            store.lastRemoteError?.takeIf { it.isNotEmpty() }?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+            }
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
@@ -69,7 +82,14 @@ fun ProfileScreen(store: ErpStore, onBack: () -> Unit, onSignedOut: () -> Unit) 
             if (message != null) Text(message!!, modifier = Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = { message = store.updateProfile(name, email, phone, title) ?: "Saved." },
+                onClick = {
+                    scope.launch {
+                        val result = withContext(Dispatchers.IO) {
+                            store.updateProfileAsync(name, email, phone, title)
+                        }
+                        message = result ?: "Saved."
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save profile") }
             Spacer(Modifier.height(8.dp))

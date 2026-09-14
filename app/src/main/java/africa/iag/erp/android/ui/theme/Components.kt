@@ -1,8 +1,11 @@
 package africa.iag.erp.android.ui.theme
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import africa.iag.erp.android.R
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -30,7 +33,11 @@ import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Engineering
 import androidx.compose.material.icons.outlined.Event
-import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.FolderShared
+import androidx.compose.material.icons.outlined.Handshake
+import androidx.compose.material.icons.outlined.PointOfSale
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Hardware
 import androidx.compose.material.icons.outlined.Inventory
@@ -57,6 +64,7 @@ import androidx.compose.material.icons.outlined.RequestPage
 import androidx.compose.material.icons.outlined.RequestQuote
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.ShoppingCart
@@ -69,8 +77,11 @@ import androidx.compose.material.icons.outlined.WorkOutline
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -89,7 +100,7 @@ import africa.iag.erp.core.QuickActionKind
 import africa.iag.erp.core.SuiteApp
 import africa.iag.erp.core.WelcomeStat
 
-val IagCardShape = RoundedCornerShape(12.dp)
+val IagCardShape = RoundedCornerShape(16.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,7 +117,7 @@ fun IagMonogram(size: Dp = 56.dp) {
     Box(
         modifier = Modifier
             .size(size)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape((size.value * 0.28f).dp))
             .background(IagOrange),
         contentAlignment = Alignment.Center,
     ) {
@@ -120,11 +131,21 @@ fun IagMonogram(size: Dp = 56.dp) {
 }
 
 @Composable
+fun IagBrandLogo(modifier: Modifier = Modifier, height: Dp = 128.dp, mono: Boolean = false) {
+    Image(
+        painter = painterResource(if (mono) R.drawable.iag_logo_mono else R.drawable.iag_logo),
+        contentDescription = "Inspire Africa Group",
+        modifier = modifier.fillMaxWidth().height(height),
+        contentScale = ContentScale.Fit,
+    )
+}
+
+@Composable
 fun IconWell(icon: ImageVector, color: Color, size: Dp = 40.dp) {
     Box(
         modifier = Modifier
             .size(size)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(color.copy(alpha = 0.12f)),
         contentAlignment = Alignment.Center,
     ) {
@@ -154,7 +175,6 @@ fun KpiChip(label: String, value: String, hint: String) {
         shape = IagCardShape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
     ) {
         Column(Modifier.padding(14.dp)) {
             Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -165,12 +185,53 @@ fun KpiChip(label: String, value: String, hint: String) {
 }
 
 @Composable
-fun SectionLabel(text: String) {
+fun SectionLabel(text: String, accessory: String? = null, onAccessory: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.weight(1f))
+        if (accessory != null) {
+            Text(
+                accessory,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                modifier = if (onAccessory != null) Modifier.clickable(onClick = onAccessory) else Modifier,
+            )
+        }
+    }
+}
+
+@Composable
+fun IagEmptyHint(text: String) {
     Text(
         text,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 15.sp,
-        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 14.sp,
+        modifier = Modifier.padding(16.dp),
+    )
+}
+
+@Composable
+fun IagSearchField(value: String, onValueChange: (String) -> Unit, placeholder: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = { Text(placeholder) },
+        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth(),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedBorderColor = Color.Transparent,
+            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+        ),
     )
 }
 
@@ -194,29 +255,43 @@ fun WelcomeCard(name: String, subtitle: String, stats: List<WelcomeStat>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(IagCardShape)
             .background(MaterialTheme.colorScheme.primary)
             .padding(18.dp),
     ) {
-        Text(
-            "Welcome back",
-            color = onOrange.copy(alpha = 0.85f),
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 12.sp,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "${greetingLabel()}, $name",
-            color = onOrange,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(subtitle, color = onOrange.copy(alpha = 0.85f), fontSize = 14.sp)
+        Row(verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "${greetingLabel()}, $name",
+                    color = onOrange,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(subtitle, color = onOrange.copy(alpha = 0.82f), fontSize = 14.sp)
+            }
+            IagMonogram(36.dp)
+        }
         if (stats.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth()) {
-                stats.forEach { stat ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(onOrange.copy(alpha = 0.14f))
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                stats.forEachIndexed { index, stat ->
+                    if (index > 0) {
+                        Box(
+                            Modifier
+                                .padding(horizontal = 8.dp)
+                                .width(1.dp)
+                                .height(28.dp)
+                                .background(onOrange.copy(alpha = 0.22f)),
+                        )
+                    }
                     Column(Modifier.weight(1f)) {
                         Text(
                             stat.value,
@@ -226,7 +301,7 @@ fun WelcomeCard(name: String, subtitle: String, stats: List<WelcomeStat>) {
                         )
                         Text(
                             stat.label,
-                            color = onOrange.copy(alpha = 0.8f),
+                            color = onOrange.copy(alpha = 0.78f),
                             fontSize = 11.sp,
                         )
                     }
@@ -273,7 +348,6 @@ fun IagCard(
 ) {
     val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     val elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
     if (onClick != null) {
         Card(
             onClick = onClick,
@@ -281,7 +355,6 @@ fun IagCard(
             shape = IagCardShape,
             colors = colors,
             elevation = elevation,
-            border = border,
         ) {
             Column(Modifier.padding(16.dp), content = content)
         }
@@ -291,9 +364,45 @@ fun IagCard(
             shape = IagCardShape,
             colors = colors,
             elevation = elevation,
-            border = border,
         ) {
             Column(Modifier.padding(16.dp), content = content)
+        }
+    }
+}
+
+@Composable
+fun IagGroupedCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = IagCardShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(content = content)
+    }
+}
+
+@Composable
+fun IagListRow(
+    onClick: (() -> Unit)? = null,
+    divider: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .padding(16.dp),
+        ) { content() }
+        if (divider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 70.dp),
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+            )
         }
     }
 }
@@ -310,9 +419,8 @@ fun AppTile(app: SuiteApp, onClick: () -> Unit) {
             app.description,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
-            maxLines = 3,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.height(48.dp),
         )
     }
 }
@@ -324,11 +432,15 @@ fun suiteAppIcon(id: String): ImageVector = when (id) {
     "security" -> Icons.Outlined.Security
     "hr" -> Icons.Outlined.Badge
     "projects" -> Icons.Outlined.WorkOutline
-    "fleet", "logistics" -> Icons.Outlined.LocalShipping
+    "contracts" -> Icons.Outlined.Handshake
+    "fleet" -> Icons.Outlined.DirectionsCar
+    "logistics" -> Icons.Outlined.LocalShipping
     "sales" -> Icons.Outlined.Storefront
+    "crm" -> Icons.Outlined.Groups
+    "pos" -> Icons.Outlined.PointOfSale
     "quality" -> Icons.Outlined.Science
     "requests" -> Icons.AutoMirrored.Outlined.Assignment
-    "records" -> Icons.Outlined.Folder
+    "dms", "records" -> Icons.Outlined.FolderShared
     else -> Icons.Outlined.Apps
 }
 
@@ -360,13 +472,18 @@ fun quickActionIcon(id: String): ImageVector = when (id) {
     "ipc" -> Icons.Outlined.RequestQuote
     "material" -> Icons.Outlined.Hardware
     "contractor" -> Icons.Outlined.Engineering
+    "contract" -> Icons.Outlined.Handshake
     "fuel" -> Icons.Outlined.LocalGasStation
     "trip" -> Icons.Outlined.Map
     "maintenance" -> Icons.Outlined.Build
-    "vehicle" -> Icons.Outlined.LocalShipping
+    "vehicle" -> Icons.Outlined.DirectionsCar
     "invoice" -> Icons.Outlined.Description
     "quote" -> Icons.Outlined.RequestPage
     "lead" -> Icons.Outlined.StarOutline
+    "opportunity" -> Icons.Outlined.StarOutline
+    "ticket" -> Icons.Outlined.ConfirmationNumber
+    "pos-sale" -> Icons.Outlined.PointOfSale
+    "session" -> Icons.Outlined.LockOpen
     "dispatch" -> Icons.AutoMirrored.Outlined.ListAlt
     "delivery" -> Icons.Outlined.LocalShipping
     "lab" -> Icons.Outlined.Science
@@ -431,10 +548,10 @@ fun QuickActionsGrid(
     pending: Int = 0,
     onAction: (QuickAction) -> Unit,
 ) {
-    IagCard {
+    IagGroupedCard {
         actions.chunked(4).forEachIndexed { index, row ->
             if (index > 0) Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)) {
                 row.forEach { action ->
                     Box(Modifier.weight(1f)) {
                         QuickActionButton(

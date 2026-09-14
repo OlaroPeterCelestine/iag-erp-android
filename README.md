@@ -1,4 +1,4 @@
-# IAG ERP Android
+# IAG Central Android
 
 Native Kotlin / Jetpack Compose Finance ERP: every department desk, records, approvals, and custom roles — same SoD / RBAC as web **IAG ERP**.
 
@@ -17,7 +17,7 @@ Native Kotlin / Jetpack Compose Finance ERP: every department desk, records, app
 
 ## What this app is
 
-The native Android Finance ERP. `:core` is a JVM library with the same SoD rules as the web `access-control` layer. After sign-in you open a full app — Finance, Procurement, Production, Security, and the rest — instead of one mixed desk list. Clock In is on every login. Administrators create **custom roles** with a page matrix (optional `*`), then assign them on Users.
+The native Android Finance ERP. `:core` is a JVM library with the same SoD rules as the web `access-control` layer. After sign-in you open a full app — Finance, Sales, CRM, POS, Fleet, Contract Management, DMS, and the rest — instead of one mixed desk list. Clock In is on every login. Administrators create **custom roles** with a page matrix (optional `*`), then assign them on Users.
 
 ## Who it is for
 
@@ -38,7 +38,7 @@ Anyone who already has a Finance role: admin, accountant, clerk, viewer, HR, HOD
 
 Built-in demo roles cannot be overwritten. Custom roles get CRUD from the matrix you set. Approve, void, payroll, and geofence still follow the same allow-lists as web ERP. Specialty apps (lab, R&D, POS, fleet, …) need an explicit grant.
 
-Demo password: `iagdemo`. Usernames include `admin`, `accountant`, `clerk`, `viewer`, `hr`, `hod`, `pm`, `contractor`, `gm`, `ceo`, `qs`, `stores`, `procurement`.
+Usernames include `admin`, `accountant`, `clerk`, `viewer`, `hr`, `hod`, `pm`, `contractor`, `gm`, `ceo`, `qs`, `stores`, `procurement`. There is no shared demo password — use **Forgot password** on first launch.
 
 ```
 core/   # RBAC, catalog, store (JVM — CI tests here)
@@ -49,16 +49,35 @@ app/    # Jetpack Compose shell
 
 ```
 ERP Android (Compose)
-  → :core (roles, departments, records)
-  → optional shared Go API (same JWT as web ERP)
+  → IAG Frontend (`https://iag-frontend-five.vercel.app`)
+  → shared Go API (same JWT as web ERP)
 ```
+
+Sign-in and records use the live workspace. Roles are loaded from the database after sign-in.
+
+## ERP API (same paths on Frontend and Go)
+
+The phone talks to Frontend `/api/*` (rewritten to the Go API). Auth is `Authorization: Bearer <token>` from `POST /api/auth/login`.
+
+| Use | Method | Path |
+| --- | --- | --- |
+| Sign in | `POST` | `/api/auth/login` (`emailOrUsername`, `password`, `keepSignedIn`) |
+| Who am I | `GET` | `/api/auth/me` |
+| Sign out | `POST` | `/api/auth/logout` |
+| Forgot password | `POST` | `/api/auth/forgot-password` |
+| Profile | `PATCH` | `/api/auth/profile` |
+| Users / roles (admin) | `GET` | `/api/auth/users`, `/api/auth/roles` |
+| List / create records | `GET` `POST` | `/api/records/:module/:entity` |
+| Update / delete one | `PATCH` `DELETE` | `/api/records/:module/:entity/:id` |
+| Approval queue | `GET` | `/api/approvals/desk` |
+| Advance / reject chain | `POST` | `/api/approvals/:entity/:id/advance` or `/reject` (`{comment}`) |
+
+Chain entities (IPC, material requests, oral/general requests, fleet requests, leave, payroll runs) must change status through `/api/approvals`, not by PATCHing `Approved`. Draft → Submitted is a record PATCH.
 
 ## Identity and data
 
 Sign in with an account from **IAG Admin** when the app is pointed at the shared API.
-On-device demo data (SharedPreferences) is only for local/offline trials — it is not the production directory.
-
-Local demo password is `iagdemo`.
+On-device demo data (SharedPreferences) is only for local/offline trials — it is not the production directory. Passwords are hashed on device; use **Forgot password** to create one. There is no default secret in the app.
 
 ## Run locally
 
@@ -74,7 +93,7 @@ CI matches web ERP: tests, then a Debug build.
 
 ## Stack
 
-Kotlin · Jetpack Compose · Material 3 · ErpCore RBAC · SharedPreferences (local) · optional shared Go API.
+Kotlin · Jetpack Compose · Material 3 · ErpCore RBAC · IAG Frontend (`https://iag-frontend-five.vercel.app`) · SharedPreferences (offline trial).
 
 ## Related IAG systems
 

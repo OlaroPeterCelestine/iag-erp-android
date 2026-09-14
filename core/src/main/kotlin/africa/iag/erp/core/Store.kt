@@ -5,6 +5,8 @@ const val STORE_KEY = "iag-erp-android-v1"
 class ErpStore(
     val modules: List<ErpModule> = erpModules(),
     private val persistence: KeyValueStore = MemoryKeyValueStore(),
+    private val api: ErpApiClient? = null,
+    private val onMain: (() -> Unit) -> Unit = { it() },
 ) {
     var user: AuthUser? = null
         private set
@@ -20,8 +22,26 @@ class ErpStore(
         private set
     var themeMode: String = "system"
         private set
+    var remoteSession: Boolean = false
+        private set
+    var lastRemoteError: String? = null
+        private set
     private val passwords = linkedMapOf<String, String>()
     private val listeners = mutableListOf<() -> Unit>()
+    private var apiToken: String = ""
+    private val knownRemoteIds = mutableSetOf<String>()
+    private val io = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    val frontendOrigin: String
+        get() = api?.origin ?: ErpConfig.origin(persistence)
+
+    val usesFrontend: Boolean get() = api != null
+
+    init {
+        if (api != null) {
+            api.origin = ErpConfig.origin(persistence)
+        }
+    }
 
     val isSignedIn: Boolean get() = user != null
     val roleName: String? get() = user?.role
@@ -238,6 +258,7 @@ class ErpStore(
         )
         persist()
         notifyChange()
+        pushRemote(open)
         return "Checked out at $clock · ${check.status}"
     }
 
@@ -273,7 +294,7 @@ class ErpStore(
     }
 
     private fun notifyChange() {
-        listeners.toList().forEach { it() }
+        onMain { listeners.toList().forEach { it() } }
     }
 
     fun roleOf(name: String?): RoleDefinition? = findRoleDefinition(roles, name)
@@ -296,8 +317,45 @@ class ErpStore(
 
     fun canVoid(moduleId: String): Boolean = canVoidIn(roleName, moduleId, currentRole)
 
-    fun passwordFor(username: String): String =
-        passwords[username.trim().lowercase()] ?: DEMO_PASSWORD
+    internal fun seedTestPasswords(password: String) {
+        for (account in demoAccounts) {
+            passwords[account.username.lowercase()] = passwordDigest(account.username, password)
+        }
+    }
+
+    private fun passwordMatches(username: String, password: String): Boolean {
+        val u = username.trim().lowercase()
+        val stored = passwords[u] ?: return false
+        if (stored.isEmpty()) return false
+        if (isPasswordHash(stored)) return stored == passwordDigest(u, password)
+        if (stored == password) {
+            passwords[u] = passwordDigest(u, password)
+            persist()
+            return true
+        }
+        return false
+    }
+
+    private fun storePassword(username: String, password: String) {
+        passwords[username.trim().lowercase()] = passwordDigest(username, password)
+    }
+
+    private fun migrateLegacyPasswords() {
+        var changed = false
+        val updated = passwords.mapValues { (user, value) ->
+            if (value.isNotEmpty() && !isPasswordHash(value)) {
+                changed = true
+                passwordDigest(user, value)
+            } else {
+                value
+            }
+        }
+        if (changed) {
+            passwords.clear()
+            passwords.putAll(updated)
+            persist()
+        }
+    }
 
     fun moduleById(id: String): ErpModule? = modules.firstOrNull { it.id == id }
 
@@ -346,6 +404,10 @@ class ErpStore(
         try {
             val j = MiniJson.parseObject(raw)
             user = (j["user"] as? Map<*, *>)?.let { AuthUser.fromJson(it.asStringMap()) }
+            apiToken = (j["apiToken"] as? String).orEmpty()
+            remoteSession = apiToken.isNotEmpty()
+            api?.token = apiToken.ifEmpty { null }
+            lastRemoteError = null
             val dept = j["activeDepartmentId"] as? String
             activeDepartmentId = if (dept.isNullOrEmpty() || moduleById(dept) == null) null else dept
             val app = j["activeAppId"] as? String
@@ -359,6 +421,7 @@ class ErpStore(
             if (pw != null) {
                 for ((k, v) in pw) passwords[k.toString().lowercase()] = v.toString()
             }
+            migrateLegacyPasswords()
             readAccessLists(j)
             val loaded = mutableListOf<ErpRecord>()
             val rawRecords = j["records"] as? List<*>
@@ -368,8 +431,13 @@ class ErpStore(
                     loaded.add(ErpRecord.fromJson(map.asStringMap()))
                 }
             }
-            records = if (loaded.isEmpty()) seed().toMutableList() else loaded
-            mergeMissingCatalogRecords()
+            records = if (loaded.isEmpty() && !remoteSession) seed().toMutableList() else loaded
+            if (remoteSession) {
+                knownRemoteIds.clear()
+                knownRemoteIds.addAll(records.map { it.id })
+            } else {
+                mergeMissingCatalogRecords()
+            }
             enforceAccess()
             themeMode = when (j["themeMode"] as? String) {
                 "light", "dark" -> j["themeMode"] as String
@@ -396,6 +464,8 @@ class ErpStore(
                     "roles" to roles.map { it.toJson() },
                     "workspaceUsers" to workspaceUsers.map { it.toJson() },
                     "records" to records.map { it.toJson() },
+                    "apiToken" to apiToken,
+                    "remoteSession" to remoteSession,
                 ),
             ),
         )
@@ -411,7 +481,7 @@ class ErpStore(
                 stored.add(RoleDefinition.fromJson(map.asStringMap()))
             }
         }
-        roles = mergeStoredRoles(stored)
+        roles = if (remoteSession) adoptApiRoles(stored) else mergeStoredRoles(stored)
         val users = mutableListOf<WorkspaceUser>()
         val rawUsers = j["workspaceUsers"] as? List<*>
         if (rawUsers != null) {
@@ -454,7 +524,178 @@ class ErpStore(
     fun login(username: String, password: String, departmentId: String? = null): String? {
         val u = username.trim().lowercase()
         val nextUser = accountFor(u) ?: return "Unknown user."
-        if (password != passwordFor(u)) return "Wrong password."
+        if (passwords[u].isNullOrEmpty()) return "No password set. Use Forgot password to create one."
+        if (!passwordMatches(u, password)) return "Wrong password."
+        return adoptUser(nextUser, departmentId)
+    }
+
+    fun loginAsync(username: String, password: String, departmentId: String? = null): String? {
+        val client = api ?: return login(username, password, departmentId)
+        lastRemoteError = null
+        val u = username.trim()
+        return client.login(u, password, true).fold(
+            onSuccess = { applyRemoteSession(it, departmentId) },
+            onFailure = { error ->
+                val apiErr = error as? ErpApiError ?: ErpApiError.Network(error.message ?: "Can't reach the workspace.")
+                lastRemoteError = apiErr.message
+                notifyChange()
+                if (apiErr.isNetwork && passwords[u.lowercase()].isNullOrEmpty().not()) {
+                    return@fold login(u, password, departmentId)
+                }
+                apiErr.message
+            },
+        )
+    }
+
+    fun resumeRemoteSession() {
+        val client = api ?: return
+        if (!remoteSession || apiToken.isEmpty()) return
+        client.token = apiToken
+        client.me().fold(
+            onSuccess = { remoteUser ->
+                user = remoteUser.authUser
+                persist()
+                notifyChange()
+                refreshDirectory()
+                upsertRoleFromRemoteUser(remoteUser)
+                persist()
+                notifyChange()
+                refreshApprovals()
+            },
+            onFailure = { error ->
+                val apiErr = error as? ErpApiError ?: ErpApiError.Network(error.message ?: "Can't reach the workspace.")
+                if (apiErr.isUnauthorized) {
+                    clearRemoteSession()
+                    user = null
+                    activeDepartmentId = null
+                    activeAppId = null
+                    persist()
+                    notifyChange()
+                } else {
+                    lastRemoteError = apiErr.message
+                    notifyChange()
+                }
+            },
+        )
+    }
+
+    fun setFrontendOrigin(origin: String) {
+        val next = ErpConfig.sanitizeOrigin(origin)
+        ErpConfig.saveOrigin(next, persistence)
+        api?.origin = next.ifEmpty { ErpConfig.liveFrontendOrigin }
+        notifyChange()
+    }
+
+    fun refreshEntity(moduleId: String, entity: String) {
+        val client = api ?: return
+        if (!remoteSession) return
+        val target = apiStorageTarget(moduleId, entity)
+        client.getRecords(target.module, target.entity).fold(
+            onSuccess = { rows ->
+                val mapped = rows.map { recordFromApi(it, moduleId, entity) }
+                val oldIds = records.filter { it.moduleId == moduleId && it.entity == entity }.map { it.id }
+                knownRemoteIds.removeAll(oldIds.toSet())
+                records = records.filter { it.moduleId != moduleId || it.entity != entity }.toMutableList()
+                records = (mapped + records).toMutableList()
+                knownRemoteIds.addAll(mapped.map { it.id })
+                persist()
+                notifyChange()
+            },
+            onFailure = { error ->
+                lastRemoteError = error.message
+                notifyChange()
+            },
+        )
+    }
+
+    fun refreshDirectory() {
+        val client = api ?: return
+        if (!remoteSession) return
+        client.listRoles().onSuccess { rows ->
+            roles = adoptApiRoles(rows.map { RoleDefinition.fromJson(it) })
+            persist()
+            notifyChange()
+        }
+        if (!isAdmin) return
+        client.listUsers().onSuccess { rows ->
+            workspaceUsers = rows.mapNotNull { workspaceUserFromApi(it) }
+            persist()
+            notifyChange()
+        }
+    }
+
+    private fun upsertRoleFromRemoteUser(remote: ErpRemoteUser) {
+        val name = remote.role.trim()
+        if (name.isEmpty()) return
+        val existing = findRoleDefinition(roles, name)
+        var next = existing ?: RoleDefinition(
+            id = remote.roleId.ifEmpty { newRoleId() },
+            name = name,
+            description = "Workspace role",
+            crud = remote.crud ?: Crud.none,
+            system = isAdminRole(name) || isBuiltInRoleName(name),
+            pagePermissions = remote.pagePermissions,
+        )
+        if (remote.roleId.isNotEmpty()) next = next.copy(id = remote.roleId)
+        if (remote.crud != null) next = next.copy(crud = remote.crud)
+        if (remote.pagePermissions.isNotEmpty()) next = next.copy(pagePermissions = remote.pagePermissions)
+        val idx = roles.indexOfFirst { normalizeRole(it.name) == normalizeRole(name) }
+        roles = if (idx >= 0) {
+            roles.toMutableList().also { it[idx] = next }
+        } else {
+            roles + next
+        }
+    }
+
+    fun refreshApprovals() {
+        val client = api ?: return
+        if (!remoteSession) return
+        client.approvalDesk().fold(
+            onSuccess = { data ->
+                val items = (data["items"] as? List<*>).orEmpty()
+                for (item in items) {
+                    val map = (item as? Map<*, *>)?.asAnyMap() ?: continue
+                    mergeApprovalItem(map)
+                }
+                persist()
+                notifyChange()
+            },
+            onFailure = { error ->
+                lastRemoteError = error.message
+                notifyChange()
+            },
+        )
+    }
+
+    fun requestFrontendPasswordReset(username: String): Result<String> {
+        val client = api ?: return Result.failure(ErpApiError.Network("Can't send a reset email right now."))
+        return client.requestPasswordReset(username.trim())
+    }
+
+    private fun applyRemoteSession(session: ErpRemoteSession, departmentId: String?): String? {
+        api?.token = session.token
+        apiToken = session.token
+        remoteSession = true
+        lastRemoteError = null
+        records.clear()
+        knownRemoteIds.clear()
+        val adopted = adoptUser(session.user.authUser, departmentId)
+        refreshDirectory()
+        upsertRoleFromRemoteUser(session.user)
+        persist()
+        notifyChange()
+        refreshApprovals()
+        return adopted
+    }
+
+    private fun clearRemoteSession() {
+        apiToken = ""
+        remoteSession = false
+        api?.token = null
+        lastRemoteError = null
+    }
+
+    private fun adoptUser(nextUser: AuthUser, departmentId: String?): String? {
         val requested = departmentId?.trim()
         val def = findRoleDefinition(roles, nextUser.role)
         var nextApp: String? = null
@@ -505,7 +746,7 @@ class ErpStore(
         if (!knownUsername(u)) return "Unknown user."
         if (newPassword.length < 6) return "Use at least 6 characters."
         if (newPassword != confirm) return "Passwords do not match."
-        passwords[u] = newPassword
+        passwords[u] = passwordDigest(u, newPassword)
         persist()
         notifyChange()
         return null
@@ -533,6 +774,32 @@ class ErpStore(
         persist()
         notifyChange()
         return null
+    }
+
+    fun updateProfileAsync(name: String, email: String, phone: String, title: String): String? {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return "Name is required."
+        val client = api
+        if (client != null && remoteSession) {
+            return client.updateProfile(trimmed, email, phone, title).fold(
+                onSuccess = { remote ->
+                    val current = user
+                    user = AuthUser(
+                        username = current?.username ?: remote.username,
+                        name = remote.name.ifEmpty { trimmed },
+                        role = remote.role.ifEmpty { current?.role ?: "Viewer" },
+                        email = remote.email.ifEmpty { email },
+                        phone = remote.phone.ifEmpty { phone },
+                        title = remote.title.ifEmpty { title },
+                    )
+                    persist()
+                    notifyChange()
+                    null
+                },
+                onFailure = { it.message },
+            )
+        }
+        return updateProfile(name, email, phone, title)
     }
 
     fun setThemeMode(mode: String) {
@@ -586,11 +853,17 @@ class ErpStore(
     }
 
     fun logout() {
+        val client = api
+        val hadRemote = remoteSession
         user = null
         activeDepartmentId = null
         activeAppId = null
+        clearRemoteSession()
         persist()
         notifyChange()
+        if (hadRemote && client != null) {
+            io.execute { client.logout() }
+        }
     }
 
     fun setQuery(q: String) {
@@ -602,6 +875,11 @@ class ErpStore(
         record.status = status
         persist()
         notifyChange()
+        val chainAdvance = ErpEndpoints.isChainEntity(record.entity) &&
+            !isDraftStatus(status) &&
+            status.lowercase() != "submitted" &&
+            status.lowercase() != "posted"
+        if (!chainAdvance) pushRemote(record)
     }
 
     fun addRecord(record: ErpRecord) {
@@ -613,60 +891,136 @@ class ErpStore(
         records = (listOf(record) + records).toMutableList()
         persist()
         notifyChange()
+        pushRemote(record)
     }
 
     fun updateRecord(record: ErpRecord) {
         if (user != null && !canEditEntity(user!!.role, record.moduleId, record.entity, currentRole)) return
         persist()
         notifyChange()
+        pushRemote(record)
     }
 
     fun submitRecord(record: ErpRecord): String? {
-        if (user == null) return "Sign in first."
-        if (!canCreateEntity(user!!.role, record.moduleId, record.entity, currentRole) &&
-            !canEditEntity(user!!.role, record.moduleId, record.entity, currentRole)
-        ) {
-            return "Your role cannot submit this record."
-        }
-        if (!isDraftStatus(record.status)) return "Only drafts can be submitted."
+        submitGate(record)?.let { return it }
         setStatus(record, if (record.entity in approvalEntities) "Submitted" else "Posted")
         return null
     }
 
+    fun submitRecordAsync(record: ErpRecord): String? {
+        submitGate(record)?.let { return it }
+        val next = if (record.entity in approvalEntities) "Submitted" else "Posted"
+        val client = api
+        if (client != null && remoteSession) {
+            val payload = apiPayload(record).toMutableMap().also { it["status"] = next }
+            val target = apiStorageTarget(record.moduleId, record.entity)
+            return client.patchRecord(target.module, target.entity, record.id, payload).fold(
+                onSuccess = { row ->
+                    adoptRemoteRow(row, record)
+                    record.status = jsonText(row["status"]) ?: next
+                    persist()
+                    notifyChange()
+                    null
+                },
+                onFailure = { error ->
+                    val apiErr = error as? ErpApiError
+                    if (apiErr?.isNotFound == true) submitRecord(record) else error.message
+                },
+            )
+        }
+        return submitRecord(record)
+    }
+
     fun approveRecord(record: ErpRecord): String? {
-        if (!canApproveIn(roleName, record.moduleId, currentRole)) {
-            return "Your role has no approval desk for this app."
-        }
-        if (record.entity !in approvalEntities || !isOpenStatus(record.status)) {
-            return "This record is not waiting for approval."
-        }
+        approvalGate(record)?.let { return it }
         setStatus(record, "Approved")
         return null
     }
 
+    fun approveRecordAsync(record: ErpRecord, comment: String = ""): String? {
+        approvalGate(record)?.let { return it }
+        val client = api
+        if (client != null && remoteSession) {
+            if (ErpEndpoints.isChainEntity(record.entity)) {
+                return client.approvalAction(apiEntityKey(record.entity), record.id, "advance", comment).fold(
+                    onSuccess = { row ->
+                        applyApprovalPayload(row, record)
+                        persist()
+                        notifyChange()
+                        null
+                    },
+                    onFailure = { it.message },
+                )
+            }
+            val payload = apiPayload(record).toMutableMap().also { it["status"] = "Approved" }
+            val target = apiStorageTarget(record.moduleId, record.entity)
+            return client.patchRecord(target.module, target.entity, record.id, payload).fold(
+                onSuccess = { row ->
+                    adoptRemoteRow(row, record)
+                    null
+                },
+                onFailure = { it.message },
+            )
+        }
+        return approveRecord(record)
+    }
+
     fun rejectRecord(record: ErpRecord): String? {
-        if (!canApproveIn(roleName, record.moduleId, currentRole)) {
-            return "Your role has no approval desk for this app."
-        }
-        if (record.entity !in approvalEntities || !isOpenStatus(record.status)) {
-            return "This record is not waiting for approval."
-        }
+        approvalGate(record)?.let { return it }
         setStatus(record, "Rejected")
         return null
     }
 
+    fun rejectRecordAsync(record: ErpRecord, comment: String = "Rejected from IAG Central."): String? {
+        approvalGate(record)?.let { return it }
+        val reason = comment.trim().ifEmpty { "Rejected from IAG Central." }
+        val client = api
+        if (client != null && remoteSession) {
+            if (ErpEndpoints.isChainEntity(record.entity)) {
+                return client.approvalAction(apiEntityKey(record.entity), record.id, "reject", reason).fold(
+                    onSuccess = { row ->
+                        applyApprovalPayload(row, record)
+                        persist()
+                        notifyChange()
+                        null
+                    },
+                    onFailure = { it.message },
+                )
+            }
+            val payload = apiPayload(record).toMutableMap().also { it["status"] = "Rejected" }
+            val target = apiStorageTarget(record.moduleId, record.entity)
+            return client.patchRecord(target.module, target.entity, record.id, payload).fold(
+                onSuccess = { row ->
+                    adoptRemoteRow(row, record)
+                    null
+                },
+                onFailure = { it.message },
+            )
+        }
+        return rejectRecord(record)
+    }
+
     fun voidRecord(record: ErpRecord): String? {
-        if (!canVoidIn(roleName, record.moduleId, currentRole)) {
-            return "Your role cannot void records here."
-        }
-        if (isDraftStatus(record.status) || isVoidedStatus(record.status)) {
-            return "This record cannot be voided."
-        }
-        if (!isApprovedStatus(record.status)) {
-            return "Only posted, paid, or approved records can be voided."
-        }
+        voidGate(record)?.let { return it }
         setStatus(record, "Void")
         return null
+    }
+
+    fun voidRecordAsync(record: ErpRecord): String? {
+        voidGate(record)?.let { return it }
+        val client = api
+        if (client != null && remoteSession) {
+            val payload = apiPayload(record).toMutableMap().also { it["status"] = "Void" }
+            val target = apiStorageTarget(record.moduleId, record.entity)
+            return client.patchRecord(target.module, target.entity, record.id, payload).fold(
+                onSuccess = { row ->
+                    adoptRemoteRow(row, record)
+                    null
+                },
+                onFailure = { it.message },
+            )
+        }
+        return voidRecord(record)
     }
 
     fun deleteRecord(record: ErpRecord): String? {
@@ -676,7 +1030,29 @@ class ErpStore(
         records = records.filter { it.id != record.id }.toMutableList()
         persist()
         notifyChange()
+        pushRemote(record, remove = true)
         return null
+    }
+
+    fun deleteRecordAsync(record: ErpRecord): String? {
+        if (!canDeleteEntity(roleName, record.moduleId, record.entity, currentRole)) {
+            return "Your role cannot delete records here."
+        }
+        val client = api
+        if (client != null && remoteSession) {
+            val target = apiStorageTarget(record.moduleId, record.entity)
+            return client.deleteRecord(target.module, target.entity, record.id).fold(
+                onSuccess = {
+                    records = records.filter { it.id != record.id }.toMutableList()
+                    knownRemoteIds.remove(record.id)
+                    persist()
+                    notifyChange()
+                    null
+                },
+                onFailure = { it.message },
+            )
+        }
+        return deleteRecord(record)
     }
 
     fun saveRole(role: RoleDefinition): String? {
@@ -744,7 +1120,7 @@ class ErpStore(
         )
         val idx = workspaceUsers.indexOfFirst { it.username == u }
         workspaceUsers = if (idx >= 0) workspaceUsers.toMutableList().also { it[idx] = row } else workspaceUsers + row
-        if (!password.isNullOrEmpty()) passwords[u] = password
+        if (!password.isNullOrEmpty()) storePassword(u, password)
         if (user?.username == u) {
             user = AuthUser(
                 username = row.username,
@@ -771,6 +1147,145 @@ class ErpStore(
         persist()
         notifyChange()
         return null
+    }
+
+    private fun submitGate(record: ErpRecord): String? {
+        if (user == null) return "Sign in first."
+        if (!canCreateEntity(user!!.role, record.moduleId, record.entity, currentRole) &&
+            !canEditEntity(user!!.role, record.moduleId, record.entity, currentRole)
+        ) {
+            return "Your role cannot submit this record."
+        }
+        if (!isDraftStatus(record.status)) return "Only drafts can be submitted."
+        return null
+    }
+
+    private fun approvalGate(record: ErpRecord): String? {
+        if (!canApproveIn(roleName, record.moduleId, currentRole)) {
+            return "Your role has no approval desk for this app."
+        }
+        if (record.entity !in approvalEntities || !isOpenStatus(record.status)) {
+            return "This record is not waiting for approval."
+        }
+        return null
+    }
+
+    private fun voidGate(record: ErpRecord): String? {
+        if (!canVoidIn(roleName, record.moduleId, currentRole)) {
+            return "Your role cannot void records here."
+        }
+        if (isDraftStatus(record.status) || isVoidedStatus(record.status)) {
+            return "This record cannot be voided."
+        }
+        if (!isApprovedStatus(record.status)) {
+            return "Only posted, paid, or approved records can be voided."
+        }
+        return null
+    }
+
+    private fun pushRemote(record: ErpRecord, remove: Boolean = false) {
+        val client = api ?: return
+        if (!remoteSession) return
+        val target = apiStorageTarget(record.moduleId, record.entity)
+        val payload = apiPayload(record)
+        val known = record.id in knownRemoteIds
+        io.execute {
+            if (remove) {
+                client.deleteRecord(target.module, target.entity, record.id).fold(
+                    onSuccess = { knownRemoteIds.remove(record.id) },
+                    onFailure = { error ->
+                        lastRemoteError = error.message
+                        notifyChange()
+                    },
+                )
+                return@execute
+            }
+            val result = if (known) {
+                client.patchRecord(target.module, target.entity, record.id, payload).fold(
+                    onSuccess = { Result.success(it) },
+                    onFailure = { error ->
+                        val apiErr = error as? ErpApiError
+                        if (apiErr?.isNotFound == true) client.createRecord(target.module, target.entity, payload)
+                        else Result.failure(error)
+                    },
+                )
+            } else {
+                client.createRecord(target.module, target.entity, payload).fold(
+                    onSuccess = { Result.success(it) },
+                    onFailure = { error ->
+                        val apiErr = error as? ErpApiError
+                        if (apiErr?.isConflict == true) client.patchRecord(target.module, target.entity, record.id, payload)
+                        else Result.failure(error)
+                    },
+                )
+            }
+            result.fold(
+                onSuccess = { row -> onMain { adoptRemoteRow(row, record) } },
+                onFailure = { error ->
+                    lastRemoteError = error.message
+                    notifyChange()
+                },
+            )
+        }
+    }
+
+    private fun adoptRemoteRow(row: Map<String, Any?>, record: ErpRecord) {
+        val mapped = recordFromApi(row, record.moduleId, record.entity)
+        record.title = mapped.title
+        record.subtitle = mapped.subtitle
+        record.status = mapped.status
+        record.date = mapped.date
+        record.amount = mapped.amount
+        record.fields = mapped.fields
+        knownRemoteIds.add(record.id)
+        if (mapped.id != record.id) {
+            val idx = records.indexOfFirst { it.id == record.id }
+            if (idx >= 0) records[idx] = mapped
+            knownRemoteIds.remove(record.id)
+            knownRemoteIds.add(mapped.id)
+        }
+        persist()
+        notifyChange()
+    }
+
+    private fun mergeApprovalItem(item: Map<String, Any?>) {
+        val id = jsonText(item["id"]).orEmpty()
+        if (id.isEmpty()) return
+        val moduleId = jsonText(item["module"]).orEmpty()
+        val entityKey = jsonText(item["entity"]).orEmpty()
+        val payload = (item["record"] as? Map<*, *>)?.asAnyMap() ?: item
+        val existing = records.firstOrNull { it.id == id }
+        if (existing != null) {
+            adoptRemoteRow(payload, existing)
+            jsonText(item["status"])?.let { if (it.isNotEmpty()) existing.status = it }
+            return
+        }
+        if (moduleId.isEmpty()) return
+        val entity = records.firstOrNull { it.moduleId == moduleId && apiEntityKey(it.entity) == entityKey }?.entity
+            ?: moduleById(moduleId)?.entities?.firstOrNull { apiEntityKey(it) == entityKey }
+            ?: entityKey
+        val mapped = recordFromApi(payload, moduleId, entity)
+        records = (listOf(mapped) + records).toMutableList()
+        knownRemoteIds.add(mapped.id)
+    }
+
+    private fun workspaceUserFromApi(row: Map<String, Any?>): WorkspaceUser? {
+        val username = (jsonText(row["username"]) ?: jsonText(row["email"]) ?: "").lowercase()
+        if (username.isEmpty() || demoAccountFor(username) != null) return null
+        return WorkspaceUser(
+            username = username,
+            name = jsonText(row["name"]) ?: username,
+            role = jsonText(row["role"]) ?: "Viewer",
+            title = jsonText(row["title"]).orEmpty(),
+            email = jsonText(row["email"]).orEmpty(),
+            phone = jsonText(row["phone"]).orEmpty(),
+        )
+    }
+
+    private fun applyApprovalPayload(json: Map<String, Any?>, record: ErpRecord) {
+        val rec = (json["record"] as? Map<*, *>)?.asAnyMap()
+        if (rec != null) adoptRemoteRow(rec, record)
+        jsonText(json["status"])?.let { if (it.isNotEmpty()) record.status = it }
     }
 
     private fun seed(): List<ErpRecord> = completeCatalogSeed(modules)

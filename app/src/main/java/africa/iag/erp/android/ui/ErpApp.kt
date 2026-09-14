@@ -18,7 +18,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -30,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -206,7 +206,7 @@ fun ShellScreen(
             containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
-                    title = { Text("Apps", fontWeight = FontWeight.Bold) },
+                    title = { Text("Apps", fontWeight = FontWeight.SemiBold) },
                     colors = iagTopBarColors(),
                     actions = {
                         if (store.isAdmin) {
@@ -244,7 +244,7 @@ fun ShellScreen(
         add("Desks")
         add("Clock")
         if (showApprovals) add("Approvals")
-        add("Workspace")
+        add("More")
     }
     val safeIndex = index.coerceAtMost(tabs.lastIndex)
     val moreIndex = tabs.lastIndex
@@ -255,7 +255,7 @@ fun ShellScreen(
         containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(tabs[safeIndex], fontWeight = FontWeight.Bold) },
+                title = { Text(tabs[safeIndex], fontWeight = FontWeight.SemiBold) },
                 colors = iagTopBarColors(),
                 actions = {
                     IconButton(onClick = { store.closeApp() }) {
@@ -273,7 +273,10 @@ fun ShellScreen(
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface, tonalElevation = NavigationBarDefaults.Elevation) {
+            NavigationBar(
+                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+            ) {
                 NavigationBarItem(
                     selected = safeIndex == 0,
                     onClick = { index = 0 },

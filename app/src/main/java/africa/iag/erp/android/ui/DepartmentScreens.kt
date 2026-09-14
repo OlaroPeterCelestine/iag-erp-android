@@ -25,6 +25,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,35 +34,42 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import africa.iag.erp.android.ui.theme.DeskRow
-import africa.iag.erp.android.ui.theme.IagCard
+import africa.iag.erp.android.ui.theme.IagEmptyHint
+import africa.iag.erp.android.ui.theme.IagGroupedCard
+import africa.iag.erp.android.ui.theme.IagListRow
+import africa.iag.erp.android.ui.theme.IagSearchField
 import africa.iag.erp.android.ui.theme.SectionLabel
-import africa.iag.erp.android.ui.theme.StatusChip
 import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.rememberStoreTick
 import africa.iag.erp.android.ui.theme.toComposeColor
 import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.formatMoney
 import africa.iag.erp.core.reportLines
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ApprovalsScreen(store: ErpStore, onOpenRecord: (String) -> Unit) {
     rememberStoreTick(store)
+    LaunchedEffect(store.remoteSession) {
+        if (store.remoteSession) withContext(Dispatchers.IO) { store.refreshApprovals() }
+    }
     val pending = store.appPendingApprovals
     LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
-        if (pending.isEmpty()) {
-            item { Text("Nothing waiting for your desk.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        } else {
-            items(pending) { rec ->
-                IagCard(modifier = Modifier.padding(bottom = 8.dp), onClick = { onOpenRecord(rec.id) }) {
-                    DeskRow(
-                        title = rec.title,
-                        subtitle = "${rec.entity} · ${rec.subtitle}",
-                        icon = Icons.Outlined.AssignmentTurnedIn,
-                        status = rec.status,
-                    )
-                    rec.amount?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(formatMoney(it), fontWeight = FontWeight.Bold)
+        item {
+            IagGroupedCard {
+                if (pending.isEmpty()) {
+                    IagEmptyHint("Nothing waiting for your desk.")
+                } else {
+                    pending.forEachIndexed { index, rec ->
+                        IagListRow(onClick = { onOpenRecord(rec.id) }, divider = index < pending.lastIndex) {
+                            DeskRow(
+                                title = rec.title,
+                                subtitle = "${rec.entity} · ${rec.subtitle}",
+                                icon = Icons.Outlined.AssignmentTurnedIn,
+                                status = rec.status,
+                            )
+                        }
                     }
                 }
             }
@@ -107,26 +115,21 @@ fun DepartmentScreen(
                 Text(module.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             item {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("Find a feature") },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                )
+                IagSearchField(query, { query = it }, "Find a feature")
             }
             item {
                 SectionLabel("${module.entities.size} features")
-            }
-            items(entities, key = { it }) { entity ->
-                IagCard(modifier = Modifier.padding(bottom = 8.dp), onClick = { onOpenEntity(entity) }) {
-                    DeskRow(
-                        title = entity,
-                        subtitle = "${store.count(moduleId, entity)} records",
-                        icon = Icons.Outlined.GridView,
-                        color = module.color.toComposeColor(),
-                    )
+                IagGroupedCard {
+                    entities.forEachIndexed { index, entity ->
+                        IagListRow(onClick = { onOpenEntity(entity) }, divider = index < entities.lastIndex) {
+                            DeskRow(
+                                title = entity,
+                                subtitle = "${store.count(moduleId, entity)} records",
+                                icon = Icons.Outlined.GridView,
+                                color = module.color.toComposeColor(),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -144,6 +147,9 @@ fun EntityListScreen(
     onCreate: () -> Unit,
 ) {
     rememberStoreTick(store)
+    LaunchedEffect(moduleId, entity) {
+        if (store.remoteSession) withContext(Dispatchers.IO) { store.refreshEntity(moduleId, entity) }
+    }
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
     val rows = store.recordsFor(moduleId, entity).filter {
@@ -177,29 +183,23 @@ fun EntityListScreen(
                 }
             }
             item {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("Filter records") },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                )
+                IagSearchField(query, { query = it }, "Filter records")
             }
-            if (rows.isEmpty()) {
-                item { Text("No ${entity.lowercase()} yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-            items(rows, key = { it.id }) { rec ->
-                IagCard(modifier = Modifier.padding(bottom = 8.dp), onClick = { onOpenRecord(rec.id) }) {
-                    DeskRow(
-                        title = rec.title,
-                        subtitle = rec.subtitle,
-                        icon = Icons.Outlined.Description,
-                        status = rec.status,
-                    )
-                    rec.amount?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(formatMoney(it), fontWeight = FontWeight.Bold)
+            item {
+                IagGroupedCard {
+                    if (rows.isEmpty()) {
+                        IagEmptyHint("No ${entity.lowercase()} yet.")
+                    } else {
+                        rows.forEachIndexed { index, rec ->
+                            IagListRow(onClick = { onOpenRecord(rec.id) }, divider = index < rows.lastIndex) {
+                                DeskRow(
+                                    title = rec.title,
+                                    subtitle = rec.subtitle,
+                                    icon = Icons.Outlined.Description,
+                                    status = rec.status,
+                                )
+                            }
+                        }
                     }
                 }
             }
