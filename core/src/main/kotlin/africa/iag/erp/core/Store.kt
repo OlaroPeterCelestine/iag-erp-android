@@ -16,6 +16,8 @@ class ErpStore(
         private set
     var activeDepartmentId: String? = null
         private set
+    var activeAppId: String? = null
+        private set
     var themeMode: String = "system"
         private set
     private val passwords = linkedMapOf<String, String>()
@@ -29,6 +31,25 @@ class ErpStore(
 
     val visibleModules: List<ErpModule>
         get() = modules.filter { canAccessModule(roleName, it.id, currentRole) }
+
+    val visibleSuiteApps: List<SuiteApp>
+        get() = suiteApps.filter { canOpenSuiteApp(roleName, it.id, currentRole) }
+
+    val activeSuiteApp: SuiteApp?
+        get() = suiteAppById(activeAppId)
+
+    val appModules: List<ErpModule>
+        get() {
+            val app = activeSuiteApp ?: return visibleModules
+            return visibleModules.filter { it.id in app.moduleIds }
+        }
+
+    val appPendingApprovals: List<ErpRecord>
+        get() {
+            if (activeSuiteApp == null) return pendingApprovals
+            val ids = appModules.map { it.id }.toSet()
+            return pendingApprovals.filter { it.moduleId in ids }
+        }
 
     val visibleWorkspaceTools: List<WorkspaceTool>
         get() = workspaceTools.filter { canAccessSpecialNav(roleName, it.id, currentRole) }
@@ -54,6 +75,53 @@ class ErpStore(
             }
         }
 
+    val homeQuickActions: List<QuickAction>
+        get() = quickActionCatalog.filter { action ->
+            val appId = action.appId
+            if (appId != null) {
+                if (activeAppId != appId) return@filter false
+            } else if (activeAppId == null) {
+                return@filter false
+            }
+            allowsQuickAction(action)
+        }.take(8)
+
+    val launcherQuickActions: List<QuickAction>
+        get() = quickActionCatalog.filter { it.appId == null && allowsQuickAction(it) }
+
+    val welcomeStats: List<WelcomeStat>
+        get() {
+            val scoped = records.filter { rec ->
+                if (!canOpen(rec.moduleId)) return@filter false
+                val app = activeSuiteApp ?: return@filter true
+                rec.moduleId in app.moduleIds
+            }
+            val stats = mutableListOf<WelcomeStat>()
+            if (activeAppId == null) {
+                stats += WelcomeStat("apps", "Apps", "${visibleSuiteApps.size}")
+            } else {
+                stats += WelcomeStat("desks", "Desks", "${appModules.size}")
+            }
+            stats += WelcomeStat("records", "Records", "${scoped.size}")
+            if (canApprove) {
+                val pending = if (activeAppId == null) pendingApprovals.size else appPendingApprovals.size
+                stats += WelcomeStat("todo", "To do", "$pending")
+            }
+            if (canClockIn) {
+                stats += WelcomeStat("clock", "Clock", if (openAttendanceToday() == null) "Out" else "In")
+            }
+            return stats.take(4)
+        }
+
+    fun allowsQuickAction(action: QuickAction): Boolean = when (action.kind) {
+        QuickActionKind.CLOCK -> canClockIn
+        QuickActionKind.APPROVALS -> canApprove
+        QuickActionKind.ACCESS -> isAdmin
+        QuickActionKind.CREATE -> canOpen(action.moduleId) &&
+            (action.entity?.let { canCreate(action.moduleId, it) } ?: canCreate(action.moduleId))
+        QuickActionKind.LIST -> canOpen(action.moduleId)
+    }
+
     fun count(moduleId: String, entity: String): Int = recordsFor(moduleId, entity).size
 
     fun recordsFor(moduleId: String, entity: String): List<ErpRecord> {
@@ -66,7 +134,7 @@ class ErpStore(
         val q = query.trim().lowercase()
         if (q.length < 2) return emptyList()
         val hits = mutableListOf<SearchHit>()
-        for (module in visibleModules) {
+        for (module in appModules) {
             if (module.label.lowercase().contains(q) || module.description.lowercase().contains(q)) {
                 hits += SearchHit(SearchKind.MODULE, module.label, module.group, module.id)
             }
@@ -83,6 +151,7 @@ class ErpStore(
         }
         for (rec in records) {
             if (!canOpen(rec.moduleId)) continue
+            if (activeSuiteApp != null && appModules.none { it.id == rec.moduleId }) continue
             if (rec.title.lowercase().contains(q) || rec.subtitle.lowercase().contains(q) || rec.entity.lowercase().contains(q)) {
                 hits += SearchHit(SearchKind.RECORD, rec.title, "${rec.entity} · ${rec.status}", rec.moduleId, entity = rec.entity, recordId = rec.id)
             }
@@ -279,6 +348,12 @@ class ErpStore(
             user = (j["user"] as? Map<*, *>)?.let { AuthUser.fromJson(it.asStringMap()) }
             val dept = j["activeDepartmentId"] as? String
             activeDepartmentId = if (dept.isNullOrEmpty() || moduleById(dept) == null) null else dept
+            val app = j["activeAppId"] as? String
+            activeAppId = when {
+                !app.isNullOrEmpty() && suiteAppById(app) != null -> app
+                activeDepartmentId != null -> suiteAppContaining(activeDepartmentId!!)?.id
+                else -> null
+            }
             val pw = j["passwords"] as? Map<*, *>
             passwords.clear()
             if (pw != null) {
@@ -315,6 +390,7 @@ class ErpStore(
                 linkedMapOf(
                     "user" to user?.toJson(),
                     "activeDepartmentId" to activeDepartmentId,
+                    "activeAppId" to activeAppId,
                     "themeMode" to themeMode,
                     "passwords" to passwords,
                     "roles" to roles.map { it.toJson() },
@@ -379,22 +455,45 @@ class ErpStore(
         val u = username.trim().lowercase()
         val nextUser = accountFor(u) ?: return "Unknown user."
         if (password != passwordFor(u)) return "Wrong password."
-        val dept = departmentId?.trim()
-        if (!dept.isNullOrEmpty() && moduleById(dept) == null) return "Unknown department."
-        var nextDept = if (dept.isNullOrEmpty()) null else dept
-        if (nextDept != null && !roleCanOpen(nextUser.role, nextDept)) {
-            return "Your role cannot open that app."
+        val requested = departmentId?.trim()
+        val def = findRoleDefinition(roles, nextUser.role)
+        var nextApp: String? = null
+        var nextDept: String? = null
+        if (!requested.isNullOrEmpty()) {
+            when {
+                suiteAppById(requested) != null -> {
+                    if (!canOpenSuiteApp(nextUser.role, requested, def)) return "Your role cannot open that app."
+                    nextApp = requested
+                }
+                moduleById(requested) != null -> {
+                    if (!roleCanOpen(nextUser.role, requested)) return "Your role cannot open that app."
+                    nextApp = suiteAppContaining(requested)?.id
+                    nextDept = requested
+                }
+                else -> return "Unknown department."
+            }
+        }
+        if (nextApp == null) {
+            val homeApp = defaultSuiteAppForRole(nextUser.role)
+            nextApp = if (homeApp != null && canOpenSuiteApp(nextUser.role, homeApp, def)) {
+                homeApp
+            } else {
+                val visible = suiteApps.filter { canOpenSuiteApp(nextUser.role, it.id, def) }
+                if (visible.size == 1) visible.first().id else null
+            }
+        }
+        if (nextDept == null && nextApp != null) {
+            nextDept = suiteAppById(nextApp)?.moduleIds?.firstOrNull { roleCanOpen(nextUser.role, it) }
         }
         if (nextDept == null) {
             val home = defaultDepartmentForRole(nextUser.role)
-            nextDept = if (home != null && moduleById(home) != null && roleCanOpen(nextUser.role, home)) {
-                home
-            } else {
-                val visible = modules.filter { roleCanOpen(nextUser.role, it.id) }.map { it.id }
-                if (visible.size == 1) visible.first() else null
+            if (home != null && moduleById(home) != null && roleCanOpen(nextUser.role, home)) {
+                nextDept = home
+                if (nextApp == null) nextApp = suiteAppContaining(home)?.id
             }
         }
         user = nextUser
+        activeAppId = nextApp
         activeDepartmentId = nextDept
         persist()
         notifyChange()
@@ -442,6 +541,20 @@ class ErpStore(
         notifyChange()
     }
 
+    fun openApp(appId: String) {
+        if (!canOpenSuiteApp(roleName, appId, currentRole)) return
+        activeAppId = appId
+        activeDepartmentId = suiteAppById(appId)?.moduleIds?.firstOrNull { canOpen(it) }
+        persist()
+        notifyChange()
+    }
+
+    fun closeApp() {
+        activeAppId = null
+        persist()
+        notifyChange()
+    }
+
     fun setActiveDepartment(departmentId: String?) {
         val dept = departmentId?.trim()
         if (dept.isNullOrEmpty() || moduleById(dept) == null) {
@@ -450,6 +563,7 @@ class ErpStore(
             return
         } else {
             activeDepartmentId = dept
+            suiteAppContaining(dept)?.let { activeAppId = it.id }
         }
         persist()
         notifyChange()
@@ -457,16 +571,24 @@ class ErpStore(
 
     private fun enforceAccess() {
         val current = user ?: return
-        val dept = activeDepartmentId ?: return
-        if (moduleById(dept) != null && roleCanOpen(current.role, dept)) return
+        if (activeAppId != null && !canOpenSuiteApp(current.role, activeAppId!!, roleOf(current.role))) {
+            activeAppId = defaultSuiteAppForRole(current.role)
+        }
+        val dept = activeDepartmentId
+        if (dept != null && moduleById(dept) != null && roleCanOpen(current.role, dept)) {
+            if (activeAppId == null) activeAppId = suiteAppContaining(dept)?.id
+            return
+        }
         val home = defaultDepartmentForRole(current.role)
         activeDepartmentId =
             if (home != null && moduleById(home) != null && roleCanOpen(current.role, home)) home else null
+        if (activeAppId == null) activeAppId = activeDepartmentId?.let { suiteAppContaining(it)?.id }
     }
 
     fun logout() {
         user = null
         activeDepartmentId = null
+        activeAppId = null
         persist()
         notifyChange()
     }

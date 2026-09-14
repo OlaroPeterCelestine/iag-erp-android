@@ -26,6 +26,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Widgets
+import africa.iag.erp.android.ui.theme.DeskRow
+import africa.iag.erp.android.ui.theme.IagCard
+import africa.iag.erp.android.ui.theme.SectionLabel
+import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.rememberStoreTick
 import africa.iag.erp.core.APP_VERSION
 import africa.iag.erp.core.ErpStore
@@ -39,33 +47,45 @@ fun MoreScreen(
     onOpenTool: (String) -> Unit,
     onOpenAccess: () -> Unit,
     onOpenProfile: () -> Unit,
+    onSwitchApp: () -> Unit = {},
 ) {
     rememberStoreTick(store)
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+        item { SectionLabel("Apps") }
+        item {
+            IagCard(onClick = onSwitchApp) {
+                DeskRow(
+                    title = "Switch app",
+                    subtitle = store.activeSuiteApp?.let { "You are in ${it.label}." } ?: "Open another IAG tool.",
+                    icon = Icons.Outlined.Apps,
+                )
+            }
+        }
         workspaceGroups.forEach { group ->
             val tools = store.visibleWorkspaceTools.filter { it.group == group }
             if (tools.isNotEmpty()) {
-                item { Text(group, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
+                item { SectionLabel(group) }
                 items(tools, key = { it.id }) { tool ->
-                    Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpenTool(tool.id) }) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(tool.label, fontWeight = FontWeight.SemiBold)
-                            Text(tool.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                        }
+                    IagCard(onClick = { onOpenTool(tool.id) }) {
+                        DeskRow(
+                            title = tool.label,
+                            subtitle = tool.description,
+                            icon = Icons.Outlined.Widgets,
+                        )
                     }
                 }
             }
         }
-        item { Text("Account", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
+        item { SectionLabel("Account") }
         item {
-            Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable(onClick = onOpenProfile)) {
-                Column(Modifier.padding(16.dp)) { Text("Profile", fontWeight = FontWeight.SemiBold) }
+            IagCard(onClick = onOpenProfile) {
+                DeskRow(title = "Profile", subtitle = "Name, theme, and sign out", icon = Icons.Outlined.Person)
             }
         }
         if (store.isAdmin) {
             item {
-                Card(Modifier.fillMaxWidth().clickable(onClick = onOpenAccess)) {
-                    Column(Modifier.padding(16.dp)) { Text("Users & roles", fontWeight = FontWeight.SemiBold) }
+                IagCard(onClick = onOpenAccess) {
+                    DeskRow(title = "Users & roles", subtitle = "Custom roles and workspace users", icon = Icons.Outlined.Shield)
                 }
             }
         }
@@ -88,9 +108,11 @@ fun WorkspaceToolScreen(
     var query by remember { mutableStateOf("") }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(tool?.label ?: "Workspace") },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },

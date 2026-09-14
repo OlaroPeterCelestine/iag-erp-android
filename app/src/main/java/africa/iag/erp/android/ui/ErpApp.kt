@@ -18,9 +18,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import africa.iag.erp.android.ui.theme.iagTopBarColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,6 +68,10 @@ fun ErpApp(store: ErpStore) {
                 onOpenClock = { nav.navigate("clock") },
                 onOpenAccess = { nav.navigate("access") },
                 onOpenProfile = { nav.navigate("profile") },
+                onCreate = { module, entity ->
+                    nav.navigate("form/$module/${URLEncoder.encode(entity, "UTF-8")}")
+                },
+                onOpenApprovals = { nav.navigate("tool/payment-requests") },
             )
         }
         composable(
@@ -191,13 +197,51 @@ fun ShellScreen(
     onOpenClock: () -> Unit,
     onOpenAccess: () -> Unit,
     onOpenProfile: () -> Unit,
+    onCreate: (String, String) -> Unit = { _, _ -> },
+    onOpenApprovals: () -> Unit = {},
 ) {
     rememberStoreTick(store)
+    if (store.activeAppId == null) {
+        Scaffold(
+            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
+            topBar = {
+                TopAppBar(
+                    title = { Text("Apps", fontWeight = FontWeight.Bold) },
+                    colors = iagTopBarColors(),
+                    actions = {
+                        if (store.isAdmin) {
+                            IconButton(onClick = onOpenAccess) {
+                                Icon(Icons.Outlined.Shield, contentDescription = "Access")
+                            }
+                        }
+                        IconButton(onClick = onOpenProfile) {
+                            Icon(Icons.Outlined.Person, contentDescription = "Account")
+                        }
+                    },
+                )
+            },
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                AppsLauncherScreen(
+                    store,
+                    onOpenClock,
+                    onOpenAccess,
+                    onOpenProfile,
+                    onOpenApprovals = onOpenApprovals,
+                    onCreate = onCreate,
+                    onOpenEntity = onOpenEntity,
+                    onOpenDepartment = onOpenDepartment,
+                )
+            }
+        }
+        return
+    }
     var index by remember { mutableIntStateOf(0) }
     val showApprovals = store.canApprove
+    val appLabel = store.activeSuiteApp?.label ?: "ERP"
     val tabs = buildList {
-        add("Overview")
-        add("Departments")
+        add(appLabel)
+        add("Desks")
         add("Clock")
         if (showApprovals) add("Approvals")
         add("Workspace")
@@ -208,10 +252,15 @@ fun ShellScreen(
     val approvalsIndex = if (showApprovals) 3 else -1
 
     Scaffold(
+        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(tabs[safeIndex], fontWeight = FontWeight.Bold) },
+                colors = iagTopBarColors(),
                 actions = {
+                    IconButton(onClick = { store.closeApp() }) {
+                        Icon(Icons.Outlined.Apps, contentDescription = "Apps")
+                    }
                     if (store.isAdmin) {
                         IconButton(onClick = onOpenAccess) {
                             Icon(Icons.Outlined.Shield, contentDescription = "Access")
@@ -224,7 +273,7 @@ fun ShellScreen(
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surface, tonalElevation = NavigationBarDefaults.Elevation) {
                 NavigationBarItem(
                     selected = safeIndex == 0,
                     onClick = { index = 0 },
@@ -235,7 +284,7 @@ fun ShellScreen(
                     selected = safeIndex == 1,
                     onClick = { index = 1 },
                     icon = { Icon(Icons.Outlined.Apartment, contentDescription = null) },
-                    label = { Text("Departments") },
+                    label = { Text("Desks") },
                 )
                 NavigationBarItem(
                     selected = safeIndex == clockIndex,
@@ -250,8 +299,8 @@ fun ShellScreen(
                         icon = {
                             BadgedBox(
                                 badge = {
-                                    if (store.pendingApprovals.isNotEmpty()) {
-                                        Badge { Text("${store.pendingApprovals.size}") }
+                                    if (store.appPendingApprovals.isNotEmpty()) {
+                                        Badge { Text("${store.appPendingApprovals.size}") }
                                     }
                                 },
                             ) {
@@ -272,11 +321,23 @@ fun ShellScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                safeIndex == 0 -> HomeScreen(store, onOpenDepartment, onOpenEntity, onOpenRecord, onOpenTool, onOpenClock, onOpenAccess)
+                safeIndex == 0 -> HomeScreen(
+                    store,
+                    onOpenDepartment,
+                    onOpenEntity,
+                    onOpenRecord,
+                    onOpenTool,
+                    onOpenClock,
+                    onOpenAccess,
+                    onCreate = onCreate,
+                    onOpenApprovals = {
+                        if (approvalsIndex >= 0) index = approvalsIndex else onOpenApprovals()
+                    },
+                )
                 safeIndex == 1 -> DepartmentsScreen(store, onOpenDepartment)
                 safeIndex == clockIndex -> ClockInPanel(store, onOpenRecord)
                 showApprovals && safeIndex == approvalsIndex -> ApprovalsScreen(store, onOpenRecord)
-                else -> MoreScreen(store, onOpenTool, onOpenAccess, onOpenProfile)
+                else -> MoreScreen(store, onOpenTool, onOpenAccess, onOpenProfile, onSwitchApp = { store.closeApp() })
             }
         }
     }

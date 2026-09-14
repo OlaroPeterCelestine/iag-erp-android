@@ -17,7 +17,7 @@ Native Kotlin / Jetpack Compose Finance ERP: every department desk, records, app
 
 ## What this app is
 
-The native Android Finance ERP. `:core` is a JVM library with the same SoD rules as the web `access-control` layer. The Compose shell is Home, Departments, Clock, Approvals, Workspace, Access, and Account. Every web ERP desk and feature is on the phone, plus a Clock In module that any signed-in login can punch. Administrators create **custom roles** with a page matrix (optional `*`), then assign them on Users.
+The native Android Finance ERP. `:core` is a JVM library with the same SoD rules as the web `access-control` layer. After sign-in you open a full app — Finance, Procurement, Production, Security, and the rest — instead of one mixed desk list. Clock In is on every login. Administrators create **custom roles** with a page matrix (optional `*`), then assign them on Users.
 
 ## Who it is for
 
@@ -25,7 +25,8 @@ Anyone who already has a Finance role: admin, accountant, clerk, viewer, HR, HOD
 
 ## What you can do
 
-- Home: balance-sheet snapshot, search across desks/features/records, then every department you can open.
+- Home: the desks in the app you opened (Finance shows banking and reports, Security shows gate passes, …).
+- Apps: switch to another full tool without signing out. Admin lands on the app grid; HR, Procurement, and contractors open their own app.
 - Clock: GPS clock-in / clock-out against HR Sites and Blocks. Clerk, viewer, and contractor can punch without opening the HR desk.
 - Departments: Banking through Reports, grouped like the web sidebar. Open a desk to see **every feature** (customers, invoices, lots, reports, …).
 - Records: open a document, create a draft, submit, approve/reject, void (where the desk allows).

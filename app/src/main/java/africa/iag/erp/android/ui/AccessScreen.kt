@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.rememberStoreTick
 import africa.iag.erp.core.Crud
 import africa.iag.erp.core.ErpStore
@@ -47,9 +48,11 @@ fun AccessScreen(store: ErpStore, onBack: () -> Unit) {
     rememberStoreTick(store)
     var tab by remember { mutableIntStateOf(0) }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Access") },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },

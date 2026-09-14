@@ -8,38 +8,54 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import africa.iag.erp.core.ErpStore
 
-val IagSlate = Color(0xFF0F172A)
-val IagEmerald = Color(0xFF059669)
-val IagSurface = Color(0xFFF8FAFC)
 val IagOrange = Color(0xFFF97316)
+val IagSuccess = Color(0xFF059669)
+val IagInk = Color(0xFF18181B)
+val IagSlate = IagInk
+val IagEmerald = IagSuccess
+val IagGold = IagOrange
+val IagCream = Color(0xFFF4F4F5)
+val IagSurface = Color(0xFFF4F4F5)
+val IagMuted = Color(0xFF71717A)
+val IagMist = Color(0xFFE4E4E7)
 
 private val LightColors = lightColorScheme(
-    primary = IagSlate,
+    primary = IagOrange,
     onPrimary = Color.White,
-    secondary = IagEmerald,
+    secondary = IagOrange,
     onSecondary = Color.White,
-    background = IagSurface,
+    tertiary = IagInk,
+    background = Color(0xFFF4F4F5),
+    onBackground = IagInk,
     surface = Color.White,
-    onBackground = IagSlate,
-    onSurface = IagSlate,
+    onSurface = IagInk,
+    surfaceVariant = Color(0xFFE4E4E7),
+    onSurfaceVariant = IagMuted,
+    outline = Color(0xFFE4E4E7),
+    outlineVariant = Color(0xFFE4E4E7),
     error = Color(0xFFB91C1C),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF34D399),
-    onPrimary = IagSlate,
-    secondary = IagEmerald,
-    onSecondary = Color.White,
-    background = IagSlate,
-    surface = Color(0xFF1E293B),
-    onBackground = Color(0xFFF8FAFC),
-    onSurface = Color(0xFFF8FAFC),
-    error = Color(0xFFB91C1C),
+    primary = Color(0xFFFB923C),
+    onPrimary = Color(0xFF1C1917),
+    secondary = Color(0xFFFB923C),
+    onSecondary = Color(0xFF1C1917),
+    tertiary = Color(0xFFF4F4F5),
+    background = Color(0xFF0C0C0E),
+    onBackground = Color(0xFFF4F4F5),
+    surface = Color(0xFF18181B),
+    onSurface = Color(0xFFF4F4F5),
+    surfaceVariant = Color(0xFF27272A),
+    onSurfaceVariant = Color(0xFFA1A1AA),
+    outline = Color(0xFF3F3F46),
+    outlineVariant = Color(0xFF3F3F46),
+    error = Color(0xFFEF4444),
 )
 
 @Composable
@@ -70,7 +86,7 @@ fun ErpAndroidTheme(store: ErpStore, content: @Composable () -> Unit) {
 fun statusColor(status: String): Color {
     val s = status.lowercase()
     if (listOf("paid", "approved", "active", "released", "closed", "verified", "present", "posted", "cleared").any { s.contains(it) }) {
-        return IagEmerald
+        return IagSuccess
     }
     if (listOf("overdue", "reject", "void", "cancel", "outside").any { s.contains(it) }) {
         return Color(0xFFB91C1C)
@@ -78,5 +94,28 @@ fun statusColor(status: String): Color {
     if (listOf("pending", "open", "draft", "held", "flagged", "submitted").any { s.contains(it) }) {
         return IagOrange
     }
-    return Color(0xFF64748B)
+    return IagMuted
 }
+
+fun greetingLabel(): String {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when {
+        hour < 12 -> "Good morning"
+        hour < 17 -> "Good afternoon"
+        else -> "Good evening"
+    }
+}
+
+fun nextThemeMode(mode: String): String = when (mode) {
+    "system" -> "light"
+    "light" -> "dark"
+    else -> "system"
+}
+
+fun themeModeLabel(mode: String): String = when (mode) {
+    "light" -> "Light"
+    "dark" -> "Dark"
+    else -> "System"
+}
+
+fun Long.toComposeColor(): Color = Color(this)

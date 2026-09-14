@@ -7,22 +7,25 @@ import android.location.Location
 import android.location.LocationManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -35,10 +38,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import africa.iag.erp.android.ui.theme.DeskRow
+import africa.iag.erp.android.ui.theme.IagCard
+import africa.iag.erp.android.ui.theme.SectionLabel
+import africa.iag.erp.android.ui.theme.StatusChip
+import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.rememberStoreTick
 import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.GeoPoint
+import africa.iag.erp.core.HQ_LATITUDE
+import africa.iag.erp.core.HQ_LONGITUDE
 import africa.iag.erp.core.recordField
 import africa.iag.erp.core.verifyAgainstZones
 
@@ -50,9 +61,11 @@ fun ClockInScreen(
     onOpenRecord: (String) -> Unit,
 ) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Clock In") },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
@@ -94,94 +107,132 @@ fun ClockInPanel(
     val loc = location ?: lastLocation(context)
 
     LazyColumn(
-        modifier = modifier.fillMaxSize().padding(16.dp),
+        modifier = modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
             Text(
-                "GPS is checked against HR Sites and Blocks. Outside the fence is rejected and still logged.",
+                store.user?.name ?: "Staff",
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 22.sp,
+            )
+            Text(store.user?.role ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (open == null) {
+                    "No open check-in today."
+                } else {
+                    "Checked in at ${recordField(open, "clockIn", "Clock in")} · ${open.subtitle}"
+                },
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
         item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        if (open == null) {
-                            "No open check-in today."
-                        } else {
-                            "Checked in at ${recordField(open, "clockIn", "Clock in")} · ${open.subtitle}"
-                        },
+            IagCard {
+                if (loc != null) {
+                    Text("GPS ${"%.5f".format(loc.latitude)}, ${"%.5f".format(loc.longitude)}")
+                    Text("Accuracy ${loc.accuracy.toInt()} m", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val check = verifyAgainstZones(
+                        GeoPoint(loc.latitude, loc.longitude),
+                        zones,
+                        loc.accuracy.toDouble(),
                     )
-                    if (loc != null) {
-                        Text("Latitude ${"%.6f".format(loc.latitude)}")
-                        Text("Longitude ${"%.6f".format(loc.longitude)}")
-                        Text("Accuracy ${loc.accuracy.toInt()} m")
-                        val check = verifyAgainstZones(
-                            GeoPoint(loc.latitude, loc.longitude),
-                            zones,
-                            loc.accuracy.toDouble(),
-                        )
-                        Text("Fence ${check.status}")
-                        Text(check.note, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        Text("Waiting for GPS…", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Button(
-                        onClick = {
-                            if (!hasLocationPermission(context)) {
-                                launcher.launch(
-                                    arrayOf(
-                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION,
-                                    ),
-                                )
-                                return@Button
-                            }
-                            val fix = lastLocation(context)
-                            location = fix
-                            if (fix == null) {
-                                message = "No GPS fix yet. Walk outside and try again."
-                                return@Button
-                            }
-                            val kind = if (open == null) "in" else "out"
-                            message = store.punch(kind, fix.latitude, fix.longitude, fix.accuracy.toDouble())
-                        },
-                        enabled = store.canClockIn,
-                    ) {
-                        Text(if (open == null) "Clock in" else "Clock out")
-                    }
-                    message?.let { Text(it) }
+                    Spacer(Modifier.height(8.dp))
+                    StatusChip(check.status)
+                    Spacer(Modifier.height(6.dp))
+                    Text(check.note, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                } else {
+                    Text("Waiting for GPS…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        if (!hasLocationPermission(context)) {
+                            launcher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                ),
+                            )
+                            return@OutlinedButton
+                        }
+                        location = lastLocation(context)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                ) { Text("Refresh GPS") }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        location = demoHqLocation()
+                        message = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                ) { Text("Use IAG Head Office (demo)") }
+                message?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
-        item { Text("Sites and blocks", fontWeight = FontWeight.Bold) }
+        item {
+            Button(
+                onClick = {
+                    if (!hasLocationPermission(context) && location == null) {
+                        launcher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                            ),
+                        )
+                        return@Button
+                    }
+                    val fix = location ?: lastLocation(context)
+                    location = fix
+                    if (fix == null) {
+                        message = "Capture GPS first, or use the Head Office demo pin."
+                        return@Button
+                    }
+                    val kind = if (open == null) "in" else "out"
+                    message = store.punch(kind, fix.latitude, fix.longitude, fix.accuracy.toDouble())
+                },
+                enabled = store.canClockIn,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Text(if (open == null) "Clock in" else "Clock out", fontWeight = FontWeight.SemiBold)
+            }
+        }
+        item { SectionLabel("Sites and blocks") }
         if (zones.isEmpty()) {
             item { Text("HR has no Sites or Blocks with coordinates yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(zones, key = { it.id }) { zone ->
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(zone.name, fontWeight = FontWeight.SemiBold)
-                        Text("${zone.kind} · ${zone.radiusMeters.toInt()} m · ${zone.status}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                IagCard {
+                    DeskRow(
+                        title = zone.name,
+                        subtitle = "${zone.kind} · ${zone.radiusMeters.toInt()} m · ${zone.status}",
+                        icon = Icons.Outlined.Place,
+                        status = zone.status,
+                    )
                 }
             }
         }
-        item { Text("My punches", fontWeight = FontWeight.Bold) }
+        item { SectionLabel("My punches") }
         if (punches.isEmpty()) {
             item { Text("No attendance rows for this login yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(punches, key = { it.id }) { rec ->
-                Card(Modifier.fillMaxWidth().clickable { onOpenRecord(rec.id) }) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(rec.title, fontWeight = FontWeight.SemiBold)
-                        val clockOut = recordField(rec, "clockOut", "Clock out").ifEmpty { "open" }
-                        Text(
-                            "${recordField(rec, "clockIn", "Clock in")}–$clockOut · ${rec.status}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                IagCard(onClick = { onOpenRecord(rec.id) }) {
+                    val clockOut = recordField(rec, "clockOut", "Clock out").ifEmpty { "open" }
+                    DeskRow(
+                        title = rec.title,
+                        subtitle = "${recordField(rec, "clockIn", "Clock in")}–$clockOut",
+                        icon = Icons.Outlined.Schedule,
+                        status = rec.status,
+                    )
                 }
             }
         }
@@ -207,4 +258,10 @@ private fun lastLocation(context: Context): Location? {
             null
         }
     }.maxByOrNull { it.time }
+}
+
+private fun demoHqLocation(): Location = Location("demo").apply {
+    latitude = HQ_LATITUDE
+    longitude = HQ_LONGITUDE
+    accuracy = 12f
 }

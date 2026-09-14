@@ -1,15 +1,20 @@
 package africa.iag.erp.android.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AssignmentTurnedIn
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -27,8 +32,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import africa.iag.erp.android.ui.theme.DeskRow
+import africa.iag.erp.android.ui.theme.IagCard
+import africa.iag.erp.android.ui.theme.SectionLabel
+import africa.iag.erp.android.ui.theme.StatusChip
+import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.rememberStoreTick
-import africa.iag.erp.android.ui.theme.statusColor
+import africa.iag.erp.android.ui.theme.toComposeColor
 import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.formatMoney
 import africa.iag.erp.core.reportLines
@@ -36,18 +46,22 @@ import africa.iag.erp.core.reportLines
 @Composable
 fun ApprovalsScreen(store: ErpStore, onOpenRecord: (String) -> Unit) {
     rememberStoreTick(store)
-    val pending = store.pendingApprovals
-    LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
+    val pending = store.appPendingApprovals
+    LazyColumn(Modifier.fillMaxSize().padding(20.dp)) {
         if (pending.isEmpty()) {
             item { Text("Nothing waiting for your desk.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {
             items(pending) { rec ->
-                Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpenRecord(rec.id) }) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(rec.title, fontWeight = FontWeight.SemiBold)
-                        Text("${rec.entity} · ${rec.subtitle}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(rec.status, color = statusColor(rec.status))
-                        rec.amount?.let { Text(formatMoney(it), fontWeight = FontWeight.Bold) }
+                IagCard(modifier = Modifier.padding(bottom = 8.dp), onClick = { onOpenRecord(rec.id) }) {
+                    DeskRow(
+                        title = rec.title,
+                        subtitle = "${rec.entity} · ${rec.subtitle}",
+                        icon = Icons.Outlined.AssignmentTurnedIn,
+                        status = rec.status,
+                    )
+                    rec.amount?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(formatMoney(it), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -77,16 +91,18 @@ fun DepartmentScreen(
     val entities = module.entities.filter { q.isEmpty() || it.lowercase().contains(q) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(module.label) },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.padding(padding).padding(16.dp)) {
+        LazyColumn(Modifier.padding(padding).padding(horizontal = 20.dp, vertical = 12.dp)) {
             item {
                 Text(module.description, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -97,17 +113,20 @@ fun DepartmentScreen(
                     label = { Text("Find a feature") },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
                 )
             }
             item {
-                Text("${module.entities.size} features", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+                SectionLabel("${module.entities.size} features")
             }
             items(entities, key = { it }) { entity ->
-                Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpenEntity(entity) }) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(entity, fontWeight = FontWeight.SemiBold)
-                        Text("${store.count(moduleId, entity)} records", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                IagCard(modifier = Modifier.padding(bottom = 8.dp), onClick = { onOpenEntity(entity) }) {
+                    DeskRow(
+                        title = entity,
+                        subtitle = "${store.count(moduleId, entity)} records",
+                        icon = Icons.Outlined.GridView,
+                        color = module.color.toComposeColor(),
+                    )
                 }
             }
         }
@@ -132,9 +151,11 @@ fun EntityListScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(entity) },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },
@@ -142,13 +163,15 @@ fun EntityListScreen(
         },
         floatingActionButton = {
             if (store.canCreate(moduleId, entity) && entity != "My punches" && entity != "Punch Log" && entity != "Clock In") {
-                FloatingActionButton(onClick = onCreate) { Text("+") }
+                FloatingActionButton(onClick = onCreate) {
+                    Icon(Icons.Outlined.Add, contentDescription = "Create")
+                }
             }
         },
     ) { padding ->
-        LazyColumn(Modifier.padding(padding).padding(16.dp)) {
+        LazyColumn(Modifier.padding(padding).padding(horizontal = 20.dp, vertical = 12.dp)) {
             if (moduleId == "reports") {
-                item { Text("Snapshot", fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp)) }
+                item { SectionLabel("Snapshot") }
                 items(reportLines(entity)) { line ->
                     RowLine(line.first, line.second)
                 }
@@ -160,18 +183,23 @@ fun EntityListScreen(
                     label = { Text("Filter records") },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
                 )
             }
             if (rows.isEmpty()) {
                 item { Text("No ${entity.lowercase()} yet.", color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             items(rows, key = { it.id }) { rec ->
-                Card(Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { onOpenRecord(rec.id) }) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(rec.title, fontWeight = FontWeight.SemiBold)
-                        Text(rec.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(rec.status, color = statusColor(rec.status))
-                        rec.amount?.let { Text(formatMoney(it), fontWeight = FontWeight.Bold) }
+                IagCard(modifier = Modifier.padding(bottom = 8.dp), onClick = { onOpenRecord(rec.id) }) {
+                    DeskRow(
+                        title = rec.title,
+                        subtitle = rec.subtitle,
+                        icon = Icons.Outlined.Description,
+                        status = rec.status,
+                    )
+                    rec.amount?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(formatMoney(it), fontWeight = FontWeight.Bold)
                     }
                 }
             }

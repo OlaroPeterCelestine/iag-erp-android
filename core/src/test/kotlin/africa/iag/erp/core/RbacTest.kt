@@ -92,6 +92,7 @@ class RbacTest {
         assertEquals("Your role cannot open that app.", s.login("contractor", "iagdemo", "banking"))
         assertNull(s.login("contractor", "iagdemo"))
         assertEquals("projects", s.activeDepartmentId)
+        assertEquals("projects", s.activeAppId)
         assertTrue(s.canOpen("contract-manager"))
         assertFalse(s.canOpen("sales"))
         s.setActiveDepartment("banking")
@@ -181,6 +182,7 @@ class RbacTest {
         assertTrue(s.canCreate("lab"))
         assertFalse(s.canApprove)
         assertEquals("lab", s.activeDepartmentId)
+        assertEquals("quality", s.activeAppId)
     }
 
     @Test
@@ -257,5 +259,99 @@ class RbacTest {
         assertTrue(s.canOpen("clock-in"))
         assertTrue(s.canOpen("projects"))
         assertFalse(s.canOpen("payroll"))
+    }
+
+    @Test
+    fun suiteAppsAreSeparateFullTools() {
+        assertEquals(
+            listOf(
+                "finance", "fleet", "hr", "logistics", "procurement", "production",
+                "projects", "quality", "records", "requests", "sales", "security",
+            ).sorted(),
+            suiteApps.map { it.id }.sorted(),
+        )
+        assertTrue(canOpenSuiteApp("Procurement", "procurement"))
+        assertFalse(canOpenSuiteApp("Procurement", "security"))
+        assertTrue(canOpenSuiteApp("HR", "hr"))
+        assertFalse(canOpenSuiteApp("Viewer", "security"))
+
+        val s = store()
+        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.activeAppId)
+        assertEquals(suiteApps.size, s.visibleSuiteApps.size)
+        s.openApp("finance")
+        assertEquals("finance", s.activeAppId)
+        assertTrue(s.appModules.any { it.id == "banking" })
+        assertFalse(s.appModules.any { it.id == "security" })
+        s.openApp("security")
+        assertEquals("security", s.activeAppId)
+        assertEquals(listOf("security"), s.appModules.map { it.id })
+        s.closeApp()
+        assertNull(s.activeAppId)
+        s.logout()
+
+        assertNull(s.login("procurement", "iagdemo"))
+        assertEquals("procurement", s.activeAppId)
+        assertTrue(s.appModules.any { it.id == "purchases" })
+        assertFalse(s.appModules.any { it.id == "banking" })
+        s.logout()
+
+        assertNull(s.login("hr", "iagdemo"))
+        assertEquals("hr", s.activeAppId)
+        s.logout()
+
+        assertEquals("Your role cannot open that app.", s.login("clerk", "iagdemo", "security"))
+        assertNull(s.login("clerk", "iagdemo"))
+        assertEquals("finance", s.activeAppId)
+    }
+
+    @Test
+    fun quickActionsFollowAppAndRbac() {
+        val s = store()
+        assertNull(s.login("admin", "iagdemo"))
+        assertTrue(s.launcherQuickActions.any { it.id == "clock" })
+        assertTrue(s.launcherQuickActions.any { it.id == "approvals" })
+        s.openApp("finance")
+        val financeIds = s.homeQuickActions.map { it.id }
+        assertTrue(financeIds.contains("clock"))
+        assertTrue(financeIds.contains("receipt"))
+        assertTrue(financeIds.contains("payment"))
+        assertFalse(financeIds.contains("po"))
+        assertTrue(s.homeQuickActions.size <= 8)
+        s.openApp("sales")
+        assertTrue(s.homeQuickActions.any { it.id == "invoice" })
+        assertTrue(s.homeQuickActions.any { it.id == "customer" })
+        s.logout()
+
+        assertNull(s.login("viewer", "iagdemo"))
+        assertEquals("finance", s.activeAppId)
+        assertTrue(s.homeQuickActions.any { it.id == "clock" })
+        assertTrue(s.homeQuickActions.any { it.id == "reports" })
+        assertFalse(s.homeQuickActions.any { it.id == "receipt" })
+        assertFalse(s.homeQuickActions.any { it.id == "approvals" })
+        s.logout()
+
+        assertNull(s.login("procurement", "iagdemo"))
+        assertTrue(s.homeQuickActions.any { it.id == "po" })
+        assertFalse(s.homeQuickActions.any { it.id == "invoice" })
+    }
+
+    @Test
+    fun welcomeStatsShowLiveCounts() {
+        val s = store()
+        assertNull(s.login("admin", "iagdemo"))
+        assertNull(s.activeAppId)
+        assertEquals(listOf("apps", "records", "todo", "clock"), s.welcomeStats.map { it.id })
+        assertEquals("${s.visibleSuiteApps.size}", s.welcomeStats.first { it.id == "apps" }.value)
+        assertEquals("Out", s.welcomeStats.first { it.id == "clock" }.value)
+        s.openApp("finance")
+        assertEquals(listOf("desks", "records", "todo", "clock"), s.welcomeStats.map { it.id })
+        assertEquals("${s.appModules.size}", s.welcomeStats.first { it.id == "desks" }.value)
+        s.logout()
+
+        assertNull(s.login("viewer", "iagdemo"))
+        assertFalse(s.welcomeStats.any { it.id == "todo" })
+        assertTrue(s.welcomeStats.any { it.id == "desks" })
+        assertTrue(s.welcomeStats.any { it.id == "clock" })
     }
 }

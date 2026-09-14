@@ -122,6 +122,12 @@ data class ErpRecord(
     }
 }
 
+data class WelcomeStat(
+    val id: String,
+    val label: String,
+    val value: String,
+)
+
 data class Kpi(
     val label: String,
     val value: String,
@@ -207,6 +213,52 @@ val departmentGroups: List<String> = listOf(
     "Records",
 )
 
+data class SuiteApp(
+    val id: String,
+    val label: String,
+    val description: String,
+    val moduleIds: List<String>,
+    val icon: String,
+    val color: Long,
+)
+
+val suiteApps: List<SuiteApp> = listOf(
+    SuiteApp("finance", "Finance", "Banking, receipts, claims, accounts, reports, assets, capital, and investments.", listOf("banking", "receipts-payments", "expense-claims", "accounts", "reports", "investments", "assets", "capital"), "account_balance", 0xFF0369A1),
+    SuiteApp("procurement", "Procurement", "Suppliers, purchase documents, goods receipts, and inventory.", listOf("purchases", "inventory"), "shopping_cart", 0xFF2563EB),
+    SuiteApp("production", "Production", "Plans, machines, batches, roast, packaging, downtime, and yield.", listOf("production"), "precision_manufacturing", 0xFFB45309),
+    SuiteApp("security", "Security", "Gate passes, visitor passes, and security incidents.", listOf("security"), "security", 0xFF334155),
+    SuiteApp("hr", "HR & Payroll", "Employees, attendance, leave, payroll runs, and payslips.", listOf("payroll"), "badge", 0xFF7C3AED),
+    SuiteApp("projects", "Projects", "Projects, Gantt, IPC, materials, and contractor contracts.", listOf("projects", "contract-manager"), "work", 0xFF4F46E5),
+    SuiteApp("fleet", "Fleet", "Vehicles, drivers, fuel, trips, and maintenance.", listOf("fleet"), "local_shipping", 0xFFD97706),
+    SuiteApp("sales", "Sales", "Customers, invoices, CRM, and restaurant POS.", listOf("sales", "crm", "pos"), "storefront", 0xFF059669),
+    SuiteApp("logistics", "Logistics", "Shipments, dispatch, routes, distribution, and deliveries.", listOf("logistics", "distribution"), "local_shipping", 0xFF0F766E),
+    SuiteApp("quality", "Quality", "R&D, lab, QA, and work-system benchmarks.", listOf("rnd", "lab", "qa", "benchmark"), "science", 0xFF6D28D9),
+    SuiteApp("requests", "Requests", "General and oral payment requests through the approval desks.", listOf("general-requests", "oral-payment-requests"), "assignment", 0xFF7C3AED),
+    SuiteApp("records", "Records", "Folders, attachments, history, and deleted records.", listOf("folders", "documents"), "folder", 0xFFA16207),
+)
+
+fun suiteAppById(id: String?): SuiteApp? = suiteApps.firstOrNull { it.id == id }
+
+fun suiteAppContaining(moduleId: String): SuiteApp? = suiteApps.firstOrNull { moduleId in it.moduleIds }
+
+fun canOpenSuiteApp(role: String?, appId: String, definition: RoleDefinition? = null): Boolean {
+    val app = suiteAppById(appId) ?: return false
+    return app.moduleIds.any { canAccessModule(role, it, definition) }
+}
+
+fun defaultSuiteAppForRole(role: String?): String? {
+    if (isAdminRole(role)) return null
+    if (isContractorRole(role)) return "projects"
+    return when (normalizeRole(role)) {
+        "quantity surveyor", "project manager" -> "projects"
+        "procurement", "stores manager" -> "procurement"
+        "hr", "human resources" -> "hr"
+        "accountant", "accounts assistant", "accounts", "finance", "clerk" -> "finance"
+        "viewer" -> "finance"
+        else -> null
+    }
+}
+
 val workspaceGroups: List<String> = listOf("Command", "Records", "Requests", "People", "Help", "Admin")
 
 enum class SearchKind { MODULE, ENTITY, RECORD, TOOL }
@@ -248,6 +300,67 @@ val workspaceTools: List<WorkspaceTool> = listOf(
     WorkspaceTool("activity-logs", "Activity", "Admin", "Who changed records.", adminOnly = true),
     WorkspaceTool("system-health", "System health", "Admin", "Local store, roles, and record counts.", adminOnly = true),
     WorkspaceTool("settings", "Settings", "Admin", "Theme and workspace options.", adminOnly = true),
+)
+
+enum class QuickActionKind { CREATE, LIST, CLOCK, APPROVALS, ACCESS }
+
+data class QuickAction(
+    val id: String,
+    val label: String,
+    val icon: String,
+    val color: Long,
+    val kind: QuickActionKind,
+    val appId: String? = null,
+    val moduleId: String,
+    val entity: String? = null,
+)
+
+val quickActionCatalog: List<QuickAction> = listOf(
+    QuickAction("clock", "Clock in", "clock", 0xFF047857, QuickActionKind.CLOCK, moduleId = "clock-in"),
+    QuickAction("approvals", "Approvals", "approvals", 0xFFC47820, QuickActionKind.APPROVALS, moduleId = "general-requests"),
+    QuickAction("access", "Users", "access", 0xFF334155, QuickActionKind.ACCESS, moduleId = "payroll"),
+    QuickAction("receipt", "Receipt", "receipt", 0xFF0F766E, QuickActionKind.CREATE, "finance", "receipts-payments", "Receipts"),
+    QuickAction("payment", "Payment", "payment", 0xFF0369A1, QuickActionKind.CREATE, "finance", "receipts-payments", "Payments"),
+    QuickAction("claim", "Claim", "claim", 0xFFB45309, QuickActionKind.CREATE, "finance", "expense-claims", "Expense Claims"),
+    QuickAction("journal", "Journal", "journal", 0xFF0F172A, QuickActionKind.CREATE, "finance", "accounts", "Journal Entries"),
+    QuickAction("reports", "Reports", "reports", 0xFF0369A1, QuickActionKind.LIST, "finance", "reports", "Balance Sheet"),
+    QuickAction("transfer", "Transfer", "transfer", 0xFF0369A1, QuickActionKind.CREATE, "finance", "banking", "Inter Account Transfers"),
+    QuickAction("po", "New PO", "po", 0xFF2563EB, QuickActionKind.CREATE, "procurement", "purchases", "Purchase Orders"),
+    QuickAction("grn", "GRN", "grn", 0xFF0E7490, QuickActionKind.CREATE, "procurement", "purchases", "Goods Receipts"),
+    QuickAction("supplier", "Supplier", "supplier", 0xFF2563EB, QuickActionKind.CREATE, "procurement", "purchases", "Suppliers"),
+    QuickAction("item", "Item", "item", 0xFF0E7490, QuickActionKind.CREATE, "procurement", "inventory", "Inventory Items"),
+    QuickAction("prod-order", "Order", "prod", 0xFFB45309, QuickActionKind.CREATE, "production", "production", "Production Orders"),
+    QuickAction("batch", "Batch", "batch", 0xFFB45309, QuickActionKind.CREATE, "production", "production", "Batch Records"),
+    QuickAction("roast", "Roast", "roast", 0xFFC2410C, QuickActionKind.CREATE, "production", "production", "Roast Batches"),
+    QuickAction("downtime", "Down", "down", 0xFF57534E, QuickActionKind.CREATE, "production", "production", "Downtime Logs"),
+    QuickAction("gate", "Gate", "gate", 0xFF334155, QuickActionKind.CREATE, "security", "security", "Gate Passes"),
+    QuickAction("visitor", "Visitor", "visitor", 0xFF334155, QuickActionKind.CREATE, "security", "security", "Visitor Passes"),
+    QuickAction("incident", "Incident", "incident", 0xFFB91C1C, QuickActionKind.CREATE, "security", "security", "Security Incidents"),
+    QuickAction("leave", "Leave", "leave", 0xFF7C3AED, QuickActionKind.CREATE, "hr", "payroll", "Leave Requests"),
+    QuickAction("employee", "Staff", "staff", 0xFF7C3AED, QuickActionKind.CREATE, "hr", "payroll", "Employees"),
+    QuickAction("payroll", "Payroll", "payroll", 0xFF7C3AED, QuickActionKind.CREATE, "hr", "payroll", "Payroll Runs"),
+    QuickAction("project", "Project", "project", 0xFF4F46E5, QuickActionKind.CREATE, "projects", "projects", "New Project"),
+    QuickAction("ipc", "IPC", "ipc", 0xFF4F46E5, QuickActionKind.CREATE, "projects", "projects", "Payment Requests (IPC)"),
+    QuickAction("material", "Material", "material", 0xFF4F46E5, QuickActionKind.CREATE, "projects", "projects", "Material Requests"),
+    QuickAction("contractor", "Contractor", "contractor", 0xFF047857, QuickActionKind.CREATE, "projects", "contract-manager", "Contractors"),
+    QuickAction("fuel", "Fuel", "fuel", 0xFFD97706, QuickActionKind.CREATE, "fleet", "fleet", "Fuel Requests"),
+    QuickAction("trip", "Trip", "trip", 0xFFD97706, QuickActionKind.CREATE, "fleet", "fleet", "Trip Requests"),
+    QuickAction("maintenance", "Service", "service", 0xFFD97706, QuickActionKind.CREATE, "fleet", "fleet", "Maintenance Requests"),
+    QuickAction("vehicle", "Vehicle", "vehicle", 0xFFD97706, QuickActionKind.CREATE, "fleet", "fleet", "Vehicles"),
+    QuickAction("invoice", "Invoice", "invoice", 0xFF059669, QuickActionKind.CREATE, "sales", "sales", "Sales Invoices"),
+    QuickAction("customer", "Customer", "customer", 0xFF059669, QuickActionKind.CREATE, "sales", "sales", "Customers"),
+    QuickAction("quote", "Quote", "quote", 0xFF059669, QuickActionKind.CREATE, "sales", "sales", "Sales Quotes"),
+    QuickAction("lead", "Lead", "lead", 0xFFBE123C, QuickActionKind.CREATE, "sales", "crm", "Leads"),
+    QuickAction("shipment", "Ship", "ship", 0xFF0F766E, QuickActionKind.CREATE, "logistics", "logistics", "Shipments"),
+    QuickAction("dispatch", "Dispatch", "dispatch", 0xFF0F766E, QuickActionKind.LIST, "logistics", "logistics", "Dispatch Board"),
+    QuickAction("delivery", "Deliver", "deliver", 0xFF0D9488, QuickActionKind.CREATE, "logistics", "distribution", "Delivery Runs"),
+    QuickAction("lab", "Lab", "lab", 0xFF6D28D9, QuickActionKind.CREATE, "quality", "lab", "Lab Requests"),
+    QuickAction("qa", "QA", "qa", 0xFF0369A1, QuickActionKind.CREATE, "quality", "qa", "Quality Checks"),
+    QuickAction("nc", "NC", "nc", 0xFFB91C1C, QuickActionKind.CREATE, "quality", "qa", "Non-conformances"),
+    QuickAction("gen-request", "Request", "request", 0xFF7C3AED, QuickActionKind.CREATE, "requests", "general-requests", "General Requests"),
+    QuickAction("oral", "Oral pay", "oral", 0xFFC2410C, QuickActionKind.CREATE, "requests", "oral-payment-requests", "Oral Payment Requests"),
+    QuickAction("folder", "Folder", "folder", 0xFFA16207, QuickActionKind.CREATE, "records", "folders", "Folders"),
+    QuickAction("attachment", "File", "file", 0xFF57534E, QuickActionKind.LIST, "records", "documents", "Attachments"),
 )
 
 val defaultKpis: List<Kpi> = listOf(

@@ -27,8 +27,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import africa.iag.erp.android.ui.theme.IagCard
+import africa.iag.erp.android.ui.theme.StatusChip
+import africa.iag.erp.android.ui.theme.iagTopBarColors
 import africa.iag.erp.android.ui.theme.rememberStoreTick
-import africa.iag.erp.android.ui.theme.statusColor
 import africa.iag.erp.core.ErpRecord
 import africa.iag.erp.core.ErpStore
 import africa.iag.erp.core.formatMoney
@@ -47,21 +49,32 @@ fun RecordDetailScreen(store: ErpStore, recordId: String, onBack: () -> Unit) {
     var message by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text(record.title) },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState())) {
-            Text(record.entity, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(record.subtitle)
-            Text(record.status, color = statusColor(record.status), fontWeight = FontWeight.SemiBold)
-            Text(record.date, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            record.amount?.let { Text(formatMoney(it), fontWeight = FontWeight.Bold) }
+        Column(Modifier.padding(padding).padding(20.dp).verticalScroll(rememberScrollState())) {
+            IagCard {
+                Text(record.entity, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                Text(record.subtitle)
+                Spacer(Modifier.height(8.dp))
+                StatusChip(record.status)
+                Spacer(Modifier.height(6.dp))
+                Text(record.date, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                record.amount?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(formatMoney(it), fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
             record.fields.forEach { (k, v) ->
                 Text("$k: $v", modifier = Modifier.padding(top = 4.dp))
             }
@@ -115,9 +128,11 @@ fun RecordFormScreen(store: ErpStore, moduleId: String, entity: String, onDone: 
     var error by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("New $entity") },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onDone) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },

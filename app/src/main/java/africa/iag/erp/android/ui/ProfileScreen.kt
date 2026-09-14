@@ -25,6 +25,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import africa.iag.erp.android.ui.theme.iagTopBarColors
+import africa.iag.erp.android.ui.theme.nextThemeMode
+import africa.iag.erp.android.ui.theme.themeModeLabel
 import africa.iag.erp.android.ui.theme.rememberStoreTick
 import africa.iag.erp.core.APP_VERSION
 import africa.iag.erp.core.ErpStore
@@ -41,9 +44,11 @@ fun ProfileScreen(store: ErpStore, onBack: () -> Unit, onSignedOut: () -> Unit) 
     var message by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = { Text("Account") },
+                colors = iagTopBarColors(),
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
                 },
@@ -69,11 +74,9 @@ fun ProfileScreen(store: ErpStore, onBack: () -> Unit, onSignedOut: () -> Unit) 
             ) { Text("Save profile") }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
-                onClick = {
-                    store.setThemeMode(if (store.themeMode == "dark") "light" else "dark")
-                },
+                onClick = { store.setThemeMode(nextThemeMode(store.themeMode)) },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (store.themeMode == "dark") "Use light theme" else "Use dark theme") }
+            ) { Text("Theme: ${themeModeLabel(store.themeMode)}") }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = {
