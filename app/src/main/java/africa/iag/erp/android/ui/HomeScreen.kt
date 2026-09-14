@@ -41,6 +41,7 @@ fun HomeScreen(
     onOpenEntity: (String, String) -> Unit,
     onOpenRecord: (String) -> Unit,
     onOpenTool: (String) -> Unit,
+    onOpenClock: () -> Unit,
     onOpenAccess: () -> Unit,
 ) {
     rememberStoreTick(store)
@@ -57,6 +58,19 @@ fun HomeScreen(
         item {
             Text("Good morning, $firstName", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("${store.user?.role ?: "Inspire Africa Group"} · Finance ERP", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (store.canClockIn && !searching) {
+            item {
+                Card(Modifier.fillMaxWidth().clickable(onClick = onOpenClock)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(if (store.openAttendanceToday() == null) "Clock in" else "Clock out", fontWeight = FontWeight.Bold)
+                        Text(
+                            "GPS punch against HR Sites and Blocks — every login.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
         item {
             OutlinedTextField(

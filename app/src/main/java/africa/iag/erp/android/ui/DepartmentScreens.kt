@@ -127,7 +127,7 @@ fun EntityListScreen(
     rememberStoreTick(store)
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
-    val rows = store.forEntity(moduleId, entity).filter {
+    val rows = store.recordsFor(moduleId, entity).filter {
         q.isEmpty() || it.title.lowercase().contains(q) || it.subtitle.lowercase().contains(q) || it.status.lowercase().contains(q)
     }
 
@@ -141,7 +141,7 @@ fun EntityListScreen(
             )
         },
         floatingActionButton = {
-            if (store.canCreate(moduleId, entity)) {
+            if (store.canCreate(moduleId, entity) && entity != "My punches" && entity != "Punch Log" && entity != "Clock In") {
                 FloatingActionButton(onClick = onCreate) { Text("+") }
             }
         },

@@ -189,6 +189,7 @@ class RbacTest {
         val seed = completeCatalogSeed(modules)
         assertTrue(modules.size >= 28)
         for (module in modules) {
+            if (module.id == "clock-in") continue
             for (entity in module.entities) {
                 assertTrue(
                     seed.any { it.moduleId == module.id && it.entity == entity },
@@ -208,5 +209,53 @@ class RbacTest {
         assertFalse(canAccessSpecialNav("Viewer", "analytics"))
         assertTrue(s.visibleWorkspaceTools.any { it.id == "trace" })
         assertFalse(s.visibleWorkspaceTools.any { it.id == "analytics" })
+    }
+
+    @Test
+    fun everyWebDepartmentAndClockInAreOnThePhone() {
+        val modules = erpModules()
+        val ids = modules.map { it.id }.toSet()
+        for (id in webErpDepartmentIds) {
+            assertTrue(id in ids, "missing web department $id")
+        }
+        assertTrue("clock-in" in ids)
+        assertTrue(canAccessModule("Viewer", "clock-in"))
+        assertTrue(canAccessModule("Clerk", "clock-in"))
+        assertTrue(canAccessModule("Contractor", "clock-in"))
+        assertTrue(canCreateIn("Viewer", "clock-in"))
+
+        val s = store()
+        assertNull(s.login("clerk", "iagdemo"))
+        assertTrue(s.canOpen("clock-in"))
+        assertFalse(s.canOpen("payroll"))
+        assertTrue(s.canClockIn)
+        assertTrue(s.geofenceZones().isNotEmpty())
+
+        val inside = s.punch("in", HQ_LATITUDE, HQ_LONGITUDE, 8.0)
+        assertTrue(inside?.contains("Checked in") == true, inside ?: "nil")
+        assertNotNull(s.openAttendanceToday())
+        assertEquals("Present", s.openAttendanceToday()?.status)
+        assertEquals("Verified", s.openAttendanceToday()?.fields?.get("verification"))
+
+        val outside = s.punch("out", 0.0, 0.0, 8.0)
+        assertTrue(outside?.contains("Outside", ignoreCase = true) == true, outside ?: "nil")
+        assertNotNull(s.openAttendanceToday())
+        assertTrue(s.forEntity("payroll", "Punch Log").any { it.status == "Rejected" })
+
+        val out = s.punch("out", HQ_LATITUDE, HQ_LONGITUDE, 8.0)
+        assertTrue(out?.contains("Checked out") == true, out ?: "nil")
+        assertNull(s.openAttendanceToday())
+        s.logout()
+
+        assertNull(s.login("viewer", "iagdemo"))
+        assertTrue(s.canOpen("clock-in"))
+        assertTrue(s.visibleModules.any { it.id == "clock-in" })
+        assertTrue(s.punch("in", HQ_LATITUDE, HQ_LONGITUDE, 8.0)?.contains("Checked in") == true)
+        s.logout()
+
+        assertNull(s.login("contractor", "iagdemo"))
+        assertTrue(s.canOpen("clock-in"))
+        assertTrue(s.canOpen("projects"))
+        assertFalse(s.canOpen("payroll"))
     }
 }

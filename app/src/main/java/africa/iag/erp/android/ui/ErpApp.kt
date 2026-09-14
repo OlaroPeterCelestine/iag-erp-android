@@ -9,6 +9,7 @@ import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.AssignmentTurnedIn
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -62,6 +63,7 @@ fun ErpApp(store: ErpStore) {
                 },
                 onOpenRecord = { nav.navigate("record/$it") },
                 onOpenTool = { nav.navigate("tool/$it") },
+                onOpenClock = { nav.navigate("clock") },
                 onOpenAccess = { nav.navigate("access") },
                 onOpenProfile = { nav.navigate("profile") },
             )
@@ -89,14 +91,22 @@ fun ErpApp(store: ErpStore) {
         ) { entry ->
             val module = entry.arguments?.getString("module") ?: return@composable
             val entity = URLDecoder.decode(entry.arguments?.getString("entity") ?: "", "UTF-8")
-            EntityListScreen(
-                store = store,
-                moduleId = module,
-                entity = entity,
-                onBack = { nav.popBackStack() },
-                onOpenRecord = { nav.navigate("record/$it") },
-                onCreate = { nav.navigate("form/$module/${URLEncoder.encode(entity, "UTF-8")}") },
-            )
+            if (entity == "Clock In") {
+                ClockInScreen(
+                    store = store,
+                    onBack = { nav.popBackStack() },
+                    onOpenRecord = { nav.navigate("record/$it") },
+                )
+            } else {
+                EntityListScreen(
+                    store = store,
+                    moduleId = module,
+                    entity = entity,
+                    onBack = { nav.popBackStack() },
+                    onOpenRecord = { nav.navigate("record/$it") },
+                    onCreate = { nav.navigate("form/$module/${URLEncoder.encode(entity, "UTF-8")}") },
+                )
+            }
         }
         composable(
             "record/{id}",
@@ -126,16 +136,31 @@ fun ErpApp(store: ErpStore) {
             arguments = listOf(navArgument("id") { type = NavType.StringType }),
         ) { entry ->
             val id = entry.arguments?.getString("id") ?: return@composable
-            WorkspaceToolScreen(
+            if (id == "clock-in") {
+                ClockInScreen(
+                    store = store,
+                    onBack = { nav.popBackStack() },
+                    onOpenRecord = { nav.navigate("record/$it") },
+                )
+            } else {
+                WorkspaceToolScreen(
+                    store = store,
+                    toolId = id,
+                    onBack = { nav.popBackStack() },
+                    onOpenDepartment = { nav.navigate("department/$it") },
+                    onOpenEntity = { module, entity ->
+                        nav.navigate("entity/$module/${URLEncoder.encode(entity, "UTF-8")}")
+                    },
+                    onOpenRecord = { nav.navigate("record/$it") },
+                    onOpenTool = { nav.navigate("tool/$it") },
+                )
+            }
+        }
+        composable("clock") {
+            ClockInScreen(
                 store = store,
-                toolId = id,
                 onBack = { nav.popBackStack() },
-                onOpenDepartment = { nav.navigate("department/$it") },
-                onOpenEntity = { module, entity ->
-                    nav.navigate("entity/$module/${URLEncoder.encode(entity, "UTF-8")}")
-                },
                 onOpenRecord = { nav.navigate("record/$it") },
-                onOpenTool = { nav.navigate("tool/$it") },
             )
         }
         composable("access") {
@@ -163,6 +188,7 @@ fun ShellScreen(
     onOpenEntity: (String, String) -> Unit,
     onOpenRecord: (String) -> Unit,
     onOpenTool: (String) -> Unit,
+    onOpenClock: () -> Unit,
     onOpenAccess: () -> Unit,
     onOpenProfile: () -> Unit,
 ) {
@@ -172,12 +198,14 @@ fun ShellScreen(
     val tabs = buildList {
         add("Overview")
         add("Departments")
+        add("Clock")
         if (showApprovals) add("Approvals")
         add("Workspace")
     }
     val safeIndex = index.coerceAtMost(tabs.lastIndex)
     val moreIndex = tabs.lastIndex
-    val approvalsIndex = if (showApprovals) 2 else -1
+    val clockIndex = 2
+    val approvalsIndex = if (showApprovals) 3 else -1
 
     Scaffold(
         topBar = {
@@ -209,6 +237,12 @@ fun ShellScreen(
                     icon = { Icon(Icons.Outlined.Apartment, contentDescription = null) },
                     label = { Text("Departments") },
                 )
+                NavigationBarItem(
+                    selected = safeIndex == clockIndex,
+                    onClick = { index = clockIndex },
+                    icon = { Icon(Icons.Outlined.Schedule, contentDescription = null) },
+                    label = { Text("Clock") },
+                )
                 if (showApprovals) {
                     NavigationBarItem(
                         selected = safeIndex == approvalsIndex,
@@ -238,8 +272,9 @@ fun ShellScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
-                safeIndex == 0 -> HomeScreen(store, onOpenDepartment, onOpenEntity, onOpenRecord, onOpenTool, onOpenAccess)
+                safeIndex == 0 -> HomeScreen(store, onOpenDepartment, onOpenEntity, onOpenRecord, onOpenTool, onOpenClock, onOpenAccess)
                 safeIndex == 1 -> DepartmentsScreen(store, onOpenDepartment)
+                safeIndex == clockIndex -> ClockInPanel(store, onOpenRecord)
                 showApprovals && safeIndex == approvalsIndex -> ApprovalsScreen(store, onOpenRecord)
                 else -> MoreScreen(store, onOpenTool, onOpenAccess, onOpenProfile)
             }

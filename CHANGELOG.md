@@ -12,6 +12,7 @@ The version in `app/build.gradle.kts` (`versionName`) is the source of truth.
 ### Added
 
 - Every web ERP desk and feature on the phone: Home lists all departments, each desk opens a feature list, plus Trace and the other workspace tools
+- Clock In tab for every signed-in login: GPS punch against HR Sites and Blocks, with a Head Office demo pin for the emulator
 
 ## [1.0.0] - 2026-09-14
 

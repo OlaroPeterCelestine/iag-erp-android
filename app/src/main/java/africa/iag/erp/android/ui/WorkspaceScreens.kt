@@ -97,6 +97,10 @@ fun WorkspaceToolScreen(
             )
         },
     ) { padding ->
+        if (toolId == "clock-in") {
+            ClockInPanel(store, onOpenRecord, Modifier.padding(padding))
+            return@Scaffold
+        }
         LazyColumn(Modifier.padding(padding).padding(16.dp)) {
             when (toolId) {
                 "trace" -> {
@@ -274,12 +278,14 @@ private val erpComms = listOf(
 
 private val erpGuides = listOf(
     "Desks" to "Every sidebar tab from web IAG ERP is a department here. Open a desk to see every feature, then open a record.",
+    "Clock in" to "The Clock tab is on every signed-in phone. GPS is checked against HR Sites and Blocks. Outside the fence is rejected; HR still sees punches on Attendance and Punch Log.",
     "Approvals" to "Expense claims, general requests, oral payments, leave, IPC, materials, fuel, trips, and maintenance wait on the Approvals tab when your role has a desk.",
-    "SoD" to "Administrators see every app. Specialty desks (fleet, lab, CRM, …) need an explicit grant. Contractors stay on Projects and Contract Manager.",
+    "SoD" to "Administrators see every app. Specialty desks (fleet, lab, CRM, …) need an explicit grant. Contractors stay on Projects and Contract Manager, plus Clock In.",
 )
 
 private val erpQnA = listOf(
     "Where is Banking?" to "Home or Departments → Treasury → Banking. Features include bank accounts, transfers, statements, and reconciliations.",
+    "Who can clock in?" to "Every signed-in login, including clerk, viewer, and contractor. You do not need the HR desk.",
     "Who can approve?" to "QS, Stores, Procurement, HR, HOD, PM, Accounts, GM, CEO, Finance, and Administrators. Clerk and Viewer cannot.",
     "Demo password?" to "iagdemo. Try admin to see every desk.",
 )
