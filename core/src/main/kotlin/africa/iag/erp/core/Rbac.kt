@@ -300,14 +300,13 @@ fun canAccessModule(role: String?, slug: String, definition: RoleDefinition? = n
     if (pages.containsKey(slug)) return pages[slug]!!.view
     if (pages.containsKey(PAGE_WILDCARD_KEY)) return pages[PAGE_WILDCARD_KEY]!!.view
 
-    if (isContractorRole(role)) return slug in contractorModules
+    if (isContractorRole(role) && slug != "clock-in") return slug in contractorModules
 
     val crud = crudForRole(role, definition)
-    if (slug in explicitGrantModules) return false
-
-    if (slug == "requests" || slug == "general-requests" || slug == "oral-payment-requests") {
+    if (slug == "clock-in" || slug == "requests" || slug == "general-requests" || slug == "oral-payment-requests") {
         return crud.view
     }
+    if (slug in explicitGrantModules) return false
     if (!crud.view) return false
 
     return when (slug) {
@@ -324,6 +323,7 @@ fun canViewEntity(role: String?, moduleId: String, definition: RoleDefinition? =
 
 fun canCreateIn(role: String?, moduleId: String, definition: RoleDefinition? = null): Boolean {
     if (!canAccessModule(role, moduleId, definition)) return false
+    if (moduleId == "clock-in") return true
     val pages = definition?.pagePermissions ?: emptyMap()
     if (pages.containsKey(moduleId)) return pages[moduleId]!!.create
     if (pages.containsKey(PAGE_WILDCARD_KEY)) return pages[PAGE_WILDCARD_KEY]!!.create
@@ -376,7 +376,7 @@ fun canAccessSpecialNav(role: String?, key: String, definition: RoleDefinition? 
     pages[key]?.let { return it.view }
     val crud = crudForRole(role, definition)
     return when (key) {
-        "dashboard", "trace", "guides", "qna", "release-notes", "templates", "comms", "accounting-documents", "payment-requests" -> crud.view
+        "dashboard", "trace", "clock-in", "guides", "qna", "release-notes", "templates", "comms", "accounting-documents", "payment-requests" -> crud.view
         else -> false
     }
 }

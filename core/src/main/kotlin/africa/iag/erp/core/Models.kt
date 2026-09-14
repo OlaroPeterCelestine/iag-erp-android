@@ -241,7 +241,7 @@ val workspaceTools: List<WorkspaceTool> = listOf(
     WorkspaceTool("accounting-documents", "Accounting documents", "Records", "Sales, purchase, payroll, and payment documents in one pack."),
     WorkspaceTool("templates", "Templates", "Records", "Reusable request and document templates."),
     WorkspaceTool("payment-requests", "Approval desks", "Requests", "Open requests waiting on a desk, plus your own returned items."),
-    WorkspaceTool("comms", "Comms", "People", "Email and SMS sent from the ERP."),
+    WorkspaceTool("clock-in", "Clock In", "People", "GPS clock-in and clock-out against Sites and Blocks."),
     WorkspaceTool("guides", "Guides", "Help", "How desks, approvals, and segregation of duties work."),
     WorkspaceTool("qna", "Q&A", "Help", "Common questions from operators."),
     WorkspaceTool("release-notes", "Release notes", "Help", "What shipped in this app."),

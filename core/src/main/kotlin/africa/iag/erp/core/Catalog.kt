@@ -268,16 +268,25 @@ fun erpModules(): List<ErpModule> = listOf(
         description = "Employees, attendance, leave, payroll runs, payslips, and statutory remittances.",
         icon = "badge",
         color = 0xFF7C3AED,
-        entities = listOf("Employees", "Departments", "Sites", "Blocks", "Attendance", "Leave Requests", "Holidays", "Job Positions", "Onboarding", "Create Payroll", "Payroll Runs", "Payslip Items", "Payslips", "Recurring Payslips", "Statutory Remittances"),
+        entities = listOf("Employees", "Departments", "Sites", "Blocks", "Attendance", "Punch Log", "Attendance Exceptions", "Attendance Summary", "Leave Requests", "Holidays", "Job Positions", "Onboarding", "Create Payroll", "Payroll Runs", "Payslip Items", "Payslips", "Recurring Payslips", "Statutory Remittances"),
         approvalEntities = setOf("Leave Requests"),
         seed = listOf(
             seedRecord("payroll", "Employees", "Sarah Nambi", "Sales · EMP-014", "Active", fields = mapOf("Department" to "Sales", "Basic pay" to "UGX 2,400,000")),
             seedRecord("payroll", "Employees", "Daniel Okello", "Operations · EMP-022", "Active", fields = mapOf("Department" to "Operations", "Basic pay" to "UGX 1,800,000")),
             seedRecord("payroll", "Sites", "IAG Head Office", "Kampala · 150 m fence", "Active", fields = mapOf("Code" to "SITE-HQ", "Address" to "Kampala", "Latitude" to "0.347596", "Longitude" to "32.582520", "Radius (m)" to "150")),
-            seedRecord("payroll", "Sites", "Africa Coffee Park", "Masaka · 250 m fence", "Active", fields = mapOf("Code" to "SITE-ACP", "Address" to "Masaka")),
-            seedRecord("payroll", "Blocks", "ACP Wet mill", "Africa Coffee Park", "Active"),
+            seedRecord("payroll", "Sites", "Africa Coffee Park", "Masaka · 250 m fence", "Active", fields = mapOf("Code" to "SITE-ACP", "Address" to "Masaka", "Latitude" to "-0.341111", "Longitude" to "31.736111", "Radius (m)" to "250")),
+            seedRecord("payroll", "Blocks", "ACP Wet mill", "Africa Coffee Park", "Active", fields = mapOf("Latitude" to "-0.341111", "Longitude" to "31.736111", "Radius (m)" to "80")),
             seedRecord("payroll", "Leave Requests", "LV-2026-009", "Sarah Nambi · annual", "Pending"),
         ),
+    ),
+    ErpModule(
+        id = "clock-in",
+        label = "Clock In",
+        group = "People",
+        description = "Geofence clock-in and clock-out for every staff login — same Sites and Blocks as HR.",
+        icon = "schedule",
+        color = 0xFFEA580C,
+        entities = listOf("Clock In", "My punches", "Punch Log"),
     ),
     ErpModule(
         id = "investments",
@@ -394,6 +403,7 @@ fun sampleRecord(module: ErpModule, entity: String): ErpRecord = seedRecord(
 
 fun completeCatalogSeed(modules: List<ErpModule> = erpModules()): List<ErpRecord> =
     modules.flatMap { module ->
+        if (module.id == "clock-in") return@flatMap emptyList()
         val grouped = module.seed.groupBy { it.entity }
         module.entities.flatMap { entity ->
             val rows = grouped[entity]

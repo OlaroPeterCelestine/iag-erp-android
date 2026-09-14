@@ -54,8 +54,13 @@ class ErpStore(
             }
         }
 
-    fun count(moduleId: String, entity: String): Int =
-        records.count { it.moduleId == moduleId && it.entity == entity }
+    fun count(moduleId: String, entity: String): Int = recordsFor(moduleId, entity).size
+
+    fun recordsFor(moduleId: String, entity: String): List<ErpRecord> {
+        if (entity == "My punches") return myPunches()
+        if (entity == "Punch Log" && moduleId == "clock-in") return forEntity("payroll", "Punch Log")
+        return forEntity(moduleId, entity)
+    }
 
     fun searchHits(query: String): List<SearchHit> {
         val q = query.trim().lowercase()
@@ -84,6 +89,110 @@ class ErpStore(
             if (hits.size >= 40) break
         }
         return hits.take(30)
+    }
+
+    val canClockIn: Boolean
+        get() = user != null && crudForRole(roleName, currentRole).view
+
+    fun geofenceZones(): List<GeofenceZone> {
+        val sites = forEntity("payroll", "Sites").mapNotNull { zoneFromRecord(it, "site") }
+        val blocks = forEntity("payroll", "Blocks").mapNotNull { zoneFromRecord(it, "block") }
+        return blocks + sites
+    }
+
+    fun myPunches(): List<ErpRecord> {
+        val name = user?.name?.trim().orEmpty()
+        return forEntity("payroll", "Attendance").filter {
+            recordField(it, "employee", "Employee") == name || it.subtitle.contains(name) || it.title.contains(name)
+        }
+    }
+
+    fun openAttendanceToday(): ErpRecord? {
+        val today = todayIsoDate()
+        return myPunches().firstOrNull {
+            it.date == today &&
+                recordField(it, "clockIn", "Clock in").isNotEmpty() &&
+                recordField(it, "clockOut", "Clock out").isEmpty()
+        }
+    }
+
+    fun punch(kind: String, latitude: Double, longitude: Double, accuracy: Double): String? {
+        if (!canClockIn) return "Sign in to clock in."
+        val check = verifyAgainstZones(GeoPoint(latitude, longitude), geofenceZones(), accuracy)
+        val name = user?.name ?: "Staff"
+        val clock = nowClock()
+        val today = todayIsoDate()
+        if (check.status == "Outside") {
+            addPunchLog(kind, name, check, latitude, longitude, accuracy)
+            return check.note
+        }
+        if (kind == "in") {
+            if (openAttendanceToday() != null) return "You already have an open check-in today. Clock out first."
+            val site = if (check.zone?.kind == "site") check.zone?.name.orEmpty() else check.zone?.siteName.orEmpty()
+            val block = if (check.zone?.kind == "block") check.zone?.name.orEmpty() else ""
+            insertRecord(
+                ErpRecord(
+                    id = newId(),
+                    moduleId = "payroll",
+                    entity = "Attendance",
+                    title = "ATT-${today.replace("-", "")}-${clock.replace(":", "")}",
+                    subtitle = "$name · ${check.zone?.name ?: "On site"}",
+                    status = "Present",
+                    date = today,
+                    fields = mapOf(
+                        "employee" to name,
+                        "site" to site,
+                        "block" to block,
+                        "clockIn" to clock,
+                        "clockOut" to "",
+                        "hours" to "",
+                        "latitude" to "%.6f".format(latitude),
+                        "longitude" to "%.6f".format(longitude),
+                        "accuracyMeters" to "${accuracy.toInt()}",
+                        "verification" to check.status,
+                        "verificationNote" to check.note,
+                    ),
+                ),
+            )
+            return "Checked in at $clock · ${check.status} · ${check.note}"
+        }
+        val open = openAttendanceToday() ?: return "No open check-in found for today."
+        val clockIn = recordField(open, "clockIn", "Clock in")
+        open.subtitle = "$name · out $clock"
+        open.fields = open.fields + mapOf(
+            "clockOut" to clock,
+            "hours" to hoursBetween(clockIn, clock),
+            "latitude" to "%.6f".format(latitude),
+            "longitude" to "%.6f".format(longitude),
+            "accuracyMeters" to "${accuracy.toInt()}",
+            "verification" to check.status,
+        )
+        persist()
+        notifyChange()
+        return "Checked out at $clock · ${check.status}"
+    }
+
+    private fun addPunchLog(kind: String, name: String, check: GeofenceCheck, latitude: Double, longitude: Double, accuracy: Double) {
+        insertRecord(
+            ErpRecord(
+                id = newId(),
+                moduleId = "payroll",
+                entity = "Punch Log",
+                title = "Rejected $kind · ${nowClock()}",
+                subtitle = name,
+                status = "Rejected",
+                date = todayIsoDate(),
+                fields = mapOf(
+                    "employee" to name,
+                    "kind" to kind,
+                    "latitude" to "%.6f".format(latitude),
+                    "longitude" to "%.6f".format(longitude),
+                    "accuracyMeters" to "${accuracy.toInt()}",
+                    "verification" to check.status,
+                    "verificationNote" to check.note,
+                ),
+            ),
+        )
     }
 
     fun addListener(listener: () -> Unit) {
@@ -375,6 +484,10 @@ class ErpStore(
 
     fun addRecord(record: ErpRecord) {
         if (user != null && !canCreateEntity(user!!.role, record.moduleId, record.entity, currentRole)) return
+        insertRecord(record)
+    }
+
+    private fun insertRecord(record: ErpRecord) {
         records = (listOf(record) + records).toMutableList()
         persist()
         notifyChange()
