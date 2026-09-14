@@ -1,8 +1,15 @@
 package africa.iag.erp.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import africa.iag.erp.android.ui.theme.IagBrandLogo
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apartment
 import androidx.compose.material.icons.outlined.Apps
@@ -25,6 +32,7 @@ import africa.iag.erp.android.ui.theme.iagTopBarColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -43,6 +51,20 @@ import java.net.URLEncoder
 @Composable
 fun ErpApp(store: ErpStore) {
     rememberStoreTick(store)
+    var showSplash by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(1350)
+        showSplash = false
+    }
+    if (showSplash) {
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            IagBrandLogo(modifier = Modifier.fillMaxWidth(0.72f).padding(horizontal = 24.dp), height = 132.dp)
+        }
+        return
+    }
     val nav = rememberNavController()
     val start = if (store.isSignedIn) "shell" else "login"
     NavHost(navController = nav, startDestination = start) {
@@ -201,46 +223,12 @@ fun ShellScreen(
     onOpenApprovals: () -> Unit = {},
 ) {
     rememberStoreTick(store)
-    if (store.activeAppId == null) {
-        Scaffold(
-            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background,
-            topBar = {
-                TopAppBar(
-                    title = { Text("Apps", fontWeight = FontWeight.SemiBold) },
-                    colors = iagTopBarColors(),
-                    actions = {
-                        if (store.isAdmin) {
-                            IconButton(onClick = onOpenAccess) {
-                                Icon(Icons.Outlined.Shield, contentDescription = "Access")
-                            }
-                        }
-                        IconButton(onClick = onOpenProfile) {
-                            Icon(Icons.Outlined.Person, contentDescription = "Account")
-                        }
-                    },
-                )
-            },
-        ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                AppsLauncherScreen(
-                    store,
-                    onOpenClock,
-                    onOpenAccess,
-                    onOpenProfile,
-                    onOpenApprovals = onOpenApprovals,
-                    onCreate = onCreate,
-                    onOpenEntity = onOpenEntity,
-                    onOpenDepartment = onOpenDepartment,
-                )
-            }
-        }
-        return
-    }
     var index by remember { mutableIntStateOf(0) }
     val showApprovals = store.canApprove
-    val appLabel = store.activeSuiteApp?.label ?: "ERP"
+    val onLauncher = store.activeAppId == null
+    val homeTitle = store.activeSuiteApp?.label ?: "Home"
     val tabs = buildList {
-        add(appLabel)
+        add(homeTitle)
         add("Desks")
         add("Clock")
         if (showApprovals) add("Approvals")
@@ -258,8 +246,10 @@ fun ShellScreen(
                 title = { Text(tabs[safeIndex], fontWeight = FontWeight.SemiBold) },
                 colors = iagTopBarColors(),
                 actions = {
-                    IconButton(onClick = { store.closeApp() }) {
-                        Icon(Icons.Outlined.Apps, contentDescription = "Apps")
+                    if (!onLauncher) {
+                        IconButton(onClick = { store.closeApp() }) {
+                            Icon(Icons.Outlined.Apps, contentDescription = "Apps")
+                        }
                     }
                     if (store.isAdmin) {
                         IconButton(onClick = onOpenAccess) {
@@ -324,13 +314,27 @@ fun ShellScreen(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when {
+                safeIndex == 0 && onLauncher -> AppsLauncherScreen(
+                    store,
+                    onOpenClock = { index = clockIndex },
+                    onOpenAccess,
+                    onOpenProfile,
+                    onOpenApprovals = {
+                        if (approvalsIndex >= 0) index = approvalsIndex else onOpenApprovals()
+                    },
+                    onCreate = onCreate,
+                    onOpenEntity = onOpenEntity,
+                    onOpenDepartment = onOpenDepartment,
+                    onOpenRecord = onOpenRecord,
+                    onOpenTool = onOpenTool,
+                )
                 safeIndex == 0 -> HomeScreen(
                     store,
                     onOpenDepartment,
                     onOpenEntity,
                     onOpenRecord,
                     onOpenTool,
-                    onOpenClock,
+                    onOpenClock = { index = clockIndex },
                     onOpenAccess,
                     onCreate = onCreate,
                     onOpenApprovals = {
@@ -340,7 +344,13 @@ fun ShellScreen(
                 safeIndex == 1 -> DepartmentsScreen(store, onOpenDepartment)
                 safeIndex == clockIndex -> ClockInPanel(store, onOpenRecord)
                 showApprovals && safeIndex == approvalsIndex -> ApprovalsScreen(store, onOpenRecord)
-                else -> MoreScreen(store, onOpenTool, onOpenAccess, onOpenProfile, onSwitchApp = { store.closeApp() })
+                else -> MoreScreen(
+                    store,
+                    onOpenTool,
+                    onOpenAccess,
+                    onOpenProfile,
+                    onSwitchApp = { store.closeApp(); index = 0 },
+                )
             }
         }
     }

@@ -1,5 +1,12 @@
 package africa.iag.erp.core
 
+internal fun jsonStr(j: Map<String, Any?>, key: String, fallback: String = ""): String {
+    val v = j[key] ?: return fallback
+    val text = v.toString().trim()
+    return text.ifEmpty { fallback }
+}
+
+
 const val APP_NAME = "IAG Central"
 const val APP_VERSION = "1.0.0"
 
@@ -45,15 +52,15 @@ data class AuthUser(
 
     companion object {
         fun fromJson(j: Map<String, Any?>): AuthUser {
-            val username = j["username"] as String
+            val username = jsonStr(j, "username")
             val defaults = demo(username)
-            val email = (j["email"] as? String)?.trim().orEmpty()
-            val phone = (j["phone"] as? String)?.trim().orEmpty()
-            val title = (j["title"] as? String)?.trim().orEmpty()
+            val email = jsonStr(j, "email")
+            val phone = jsonStr(j, "phone")
+            val title = jsonStr(j, "title")
             return AuthUser(
                 username = username,
-                name = j["name"] as? String ?: defaults.name,
-                role = j["role"] as? String ?: defaults.role,
+                name = jsonStr(j, "name", defaults.name),
+                role = jsonStr(j, "role", defaults.role),
                 email = email.ifEmpty { defaults.email },
                 phone = phone.ifEmpty { defaults.phone },
                 title = title.ifEmpty { defaults.title },
@@ -108,13 +115,13 @@ data class ErpRecord(
                 fieldsRaw.entries.associate { it.key.toString() to it.value.toString() }
             } else emptyMap()
             return ErpRecord(
-                id = j["id"] as String,
-                moduleId = j["moduleId"] as String,
-                entity = j["entity"] as String,
-                title = j["title"] as String,
-                subtitle = j["subtitle"] as? String ?: "",
-                status = j["status"] as? String ?: "Draft",
-                date = j["date"] as? String ?: "",
+                id = jsonStr(j, "id"),
+                moduleId = jsonStr(j, "moduleId"),
+                entity = jsonStr(j, "entity"),
+                title = jsonStr(j, "title"),
+                subtitle = jsonStr(j, "subtitle"),
+                status = jsonStr(j, "status", "Draft"),
+                date = jsonStr(j, "date"),
                 amount = (j["amount"] as? Number)?.toDouble(),
                 fields = fields,
             )

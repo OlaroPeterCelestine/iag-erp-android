@@ -28,7 +28,7 @@ import africa.iag.erp.android.ui.theme.IagGroupedCard
 import africa.iag.erp.android.ui.theme.IagListRow
 import africa.iag.erp.android.ui.theme.IagSearchField
 import africa.iag.erp.android.ui.theme.KpiChip
-import africa.iag.erp.android.ui.theme.QuickActionsGrid
+import africa.iag.erp.android.ui.theme.QuickActionRail
 import africa.iag.erp.android.ui.theme.SectionLabel
 import africa.iag.erp.android.ui.theme.WelcomeCard
 import africa.iag.erp.android.ui.theme.rememberStoreTick
@@ -55,8 +55,8 @@ fun HomeScreen(
     var query by remember { mutableStateOf("") }
     val hits = store.searchHits(query)
     val pending = if (store.canApprove) store.appPendingApprovals else emptyList()
-    val todos = pending.take(4)
-    val recents = store.recent.filter { store.canOpen(it.moduleId) }.take(6)
+    val todos = pending.take(3)
+    val recents = store.recent.filter { store.canOpen(it.moduleId) }.take(3)
     val firstName = store.user?.name?.split(" ")?.firstOrNull() ?: "there"
     val searching = query.trim().isNotEmpty()
 
@@ -69,7 +69,7 @@ fun HomeScreen(
             item {
                 WelcomeCard(
                     name = firstName,
-                    subtitle = "${store.user?.role ?: "Inspire Africa Group"} · ${store.activeSuiteApp?.label ?: APP_NAME}",
+                    subtitle = store.activeSuiteApp?.label ?: store.user?.role ?: APP_NAME,
                     stats = store.welcomeStats,
                 )
             }
@@ -107,8 +107,8 @@ fun HomeScreen(
         } else {
             if (store.homeQuickActions.isNotEmpty()) {
                 item {
-                    SectionLabel("Quick actions")
-                    QuickActionsGrid(
+                    SectionLabel("Do now")
+                    QuickActionRail(
                         actions = store.homeQuickActions,
                         pending = store.appPendingApprovals.size,
                         onAction = { openQuickAction(it, onOpenDepartment, onOpenEntity, onOpenClock, onOpenAccess, onCreate, onOpenApprovals) },
@@ -125,33 +125,27 @@ fun HomeScreen(
                     }
                 }
             }
-            if (store.canApprove) {
+            if (store.canApprove && todos.isNotEmpty()) {
                 item {
-                    SectionLabel("To do", accessory = if (todos.isEmpty()) null else "See all", onAccessory = onOpenApprovals)
+                    SectionLabel("Waiting for you", accessory = "See all", onAccessory = onOpenApprovals)
                     IagGroupedCard {
-                        if (todos.isEmpty()) {
-                            IagEmptyHint("Nothing waiting for your desk.")
-                        } else {
-                            todos.forEachIndexed { index, rec ->
-                                IagListRow(onClick = { onOpenRecord(rec.id) }, divider = index < todos.lastIndex) {
-                                    DeskRow(
-                                        title = rec.title,
-                                        subtitle = "${rec.entity} · ${rec.subtitle}",
-                                        icon = Icons.Outlined.AssignmentTurnedIn,
-                                        status = rec.status,
-                                    )
-                                }
+                        todos.forEachIndexed { index, rec ->
+                            IagListRow(onClick = { onOpenRecord(rec.id) }, divider = index < todos.lastIndex) {
+                                DeskRow(
+                                    title = rec.title,
+                                    subtitle = "${rec.entity} · ${rec.subtitle}",
+                                    icon = Icons.Outlined.AssignmentTurnedIn,
+                                    status = rec.status,
+                                )
                             }
                         }
                     }
                 }
             }
-            item {
-                SectionLabel("Recent")
-                IagGroupedCard {
-                    if (recents.isEmpty()) {
-                        IagEmptyHint("Records you open will show up here.")
-                    } else {
+            if (recents.isNotEmpty()) {
+                item {
+                    SectionLabel("Jump back")
+                    IagGroupedCard {
                         recents.forEachIndexed { index, rec ->
                             IagListRow(onClick = { onOpenRecord(rec.id) }, divider = index < recents.lastIndex) {
                                 DeskRow(
@@ -194,7 +188,7 @@ fun openQuickAction(
     }
 }
 
-private fun openSearchHit(
+fun openSearchHit(
     hit: SearchHit,
     onOpenDepartment: (String) -> Unit,
     onOpenEntity: (String, String) -> Unit,

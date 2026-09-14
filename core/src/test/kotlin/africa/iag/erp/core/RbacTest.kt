@@ -323,6 +323,15 @@ class RbacTest {
         assertNull(s.login("admin", testPassword))
         assertTrue(s.launcherQuickActions.any { it.id == "clock" })
         assertTrue(s.launcherQuickActions.any { it.id == "approvals" })
+        assertTrue(s.launcherQuickActions.any { it.id == "access" })
+        assertEquals(
+            s.launcherQuickActions.mapNotNull { it.appId }.toSet(),
+            s.visibleSuiteApps.map { it.id }.toSet(),
+        )
+        assertTrue(s.launcherQuickActions.any { it.id == "receipt" })
+        assertTrue(s.launcherQuickActions.any { it.id == "invoice" })
+        assertTrue(s.launcherQuickActions.any { it.id == "lead" })
+        assertTrue(s.launcherQuickActions.any { it.id == "po" })
         s.openApp("finance")
         val financeIds = s.homeQuickActions.map { it.id }
         assertTrue(financeIds.contains("clock"))
@@ -389,6 +398,42 @@ class RbacTest {
         val raw = persistence.get(STORE_KEY) ?: ""
         assertFalse(raw.contains(testPassword))
         assertTrue(raw.contains(passwordDigest("admin", testPassword)))
+    }
+
+    @Test
+    fun continueOnThisDeviceSavesFirstPasswordAndAcceptsLiveEmail() {
+        val s = ErpStore(persistence = MemoryKeyValueStore())
+        s.load()
+        assertNull(s.loginOnThisDevice("admin@iag.local", "ChangeMe"))
+        assertTrue(s.isSignedIn)
+        assertEquals("admin", s.user?.username)
+        assertFalse(s.remoteSession)
+        s.logout()
+        assertNull(s.login("admin", "ChangeMe"))
+    }
+
+    @Test
+    fun continueOnThisDeviceReplacesWrongLocalPassword() {
+        val s = ErpStore(persistence = MemoryKeyValueStore())
+        s.load()
+        assertNull(s.loginOnThisDevice("admin", "ChangeMe"))
+        s.logout()
+        assertNull(s.loginOnThisDevice("admin", "NewPass1"))
+        s.logout()
+        assertNull(s.login("admin", "NewPass1"))
+        assertEquals("Wrong password.", s.login("admin", "ChangeMe"))
+    }
+
+    @Test
+    fun userNoticeHidesTechnicalLoginErrors() {
+        assertEquals("Couldn't sign in", userNotice("Wrong password.").title)
+        assertEquals(
+            "Couldn't sign in",
+            userNotice(describeLiveLoginFailure("shortpw", "Invalid email/username or password.")).title,
+        )
+        assertFalse(userNotice("HTTP 401 Unauthorized").message.contains("401", ignoreCase = true))
+        assertEquals("No connection", userNotice("Can't reach the workspace.").title)
+        assertEquals("Password too short", userNotice("Use at least 6 characters.").title)
     }
 
     @Test

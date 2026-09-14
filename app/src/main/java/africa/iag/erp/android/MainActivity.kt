@@ -9,6 +9,7 @@ import africa.iag.erp.android.ui.theme.ErpAndroidTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_ErpAndroid)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as ErpAndroidApp

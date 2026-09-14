@@ -5,7 +5,7 @@ const val STORE_KEY = "iag-erp-android-v1"
 /** Live accounts must use the web ERP password. The old short demo login is rejected after the first forced change. */
 fun describeLiveLoginFailure(password: String, apiMessage: String): String {
     if (password.length < 10) {
-        return "The live workspace rejected this password. Use the same password as the web ERP (at least 10 characters) — not the old short demo login."
+        return "Live sign-in needs your web ERP password (10+ characters). Tap Continue on this device to try the app here."
     }
     return apiMessage
 }
@@ -115,7 +115,25 @@ class ErpStore(
         }.take(8)
 
     val launcherQuickActions: List<QuickAction>
-        get() = quickActionCatalog.filter { it.appId == null && allowsQuickAction(it) }
+        get() {
+            val out = mutableListOf<QuickAction>()
+            for (action in quickActionCatalog) {
+                if (action.appId == null && allowsQuickAction(action)) out += action
+            }
+            val visible = visibleSuiteApps.map { it.id }.toSet()
+            val seenApps = mutableSetOf<String>()
+            for (action in quickActionCatalog) {
+                val appId = action.appId ?: continue
+                if (appId !in visible || appId in seenApps) continue
+                if (!allowsQuickAction(action)) continue
+                seenApps += appId
+                out += action
+            }
+            return out
+        }
+
+    fun recordCount(app: SuiteApp): Int =
+        records.count { it.moduleId in app.moduleIds && canOpen(it.moduleId) }
 
     val welcomeStats: List<WelcomeStat>
         get() {
@@ -508,14 +526,14 @@ class ErpStore(
     }
 
     fun knownUsername(username: String): Boolean {
-        val u = username.trim().lowercase()
+        val u = canonicalLoginUsername(username)
         return demoAccountFor(u) != null || workspaceUserFor(u) != null
     }
 
     fun accountFor(username: String): AuthUser? {
         val demo = demoAccountFor(username)
         if (demo != null) return AuthUser.demo(demo.username)
-        val custom = workspaceUserFor(username) ?: return null
+        val custom = workspaceUserFor(canonicalLoginUsername(username)) ?: return null
         return AuthUser(
             username = custom.username,
             name = custom.name.ifEmpty { custom.username },
@@ -530,11 +548,21 @@ class ErpStore(
         canAccessModule(role, slug, roleOf(role))
 
     fun login(username: String, password: String, departmentId: String? = null): String? {
-        val u = username.trim().lowercase()
-        val nextUser = accountFor(u) ?: return "Unknown user."
+        val nextUser = accountFor(username) ?: return "Unknown user."
+        val u = nextUser.username.lowercase()
         if (passwords[u].isNullOrEmpty()) return "No password set. Use Forgot password to create one."
         if (!passwordMatches(u, password)) return "Wrong password."
         return adoptUser(nextUser, departmentId)
+    }
+
+    /** Offline trial: saves the typed password on this phone, then signs in locally. */
+    fun loginOnThisDevice(username: String, password: String, departmentId: String? = null): String? {
+        val missing = login(username, password, departmentId)
+        if (missing == "No password set. Use Forgot password to create one." || missing == "Wrong password.") {
+            resetPassword(username, password, password)?.let { return it }
+            return login(username, password, departmentId)
+        }
+        return missing
     }
 
     fun loginAsync(username: String, password: String, departmentId: String? = null): String? {
@@ -547,7 +575,7 @@ class ErpStore(
                 val apiErr = error as? ErpApiError ?: ErpApiError.Network(error.message ?: "Can't reach the workspace.")
                 lastRemoteError = apiErr.message
                 notifyChange()
-                if (apiErr.isNetwork && passwords[u.lowercase()].isNullOrEmpty().not()) {
+                if (apiErr.isNetwork && passwords[canonicalLoginUsername(u)].isNullOrEmpty().not()) {
                     return@fold login(u, password, departmentId)
                 }
                 if (apiErr.isUnauthorized) {
@@ -756,7 +784,7 @@ class ErpStore(
     }
 
     fun resetPassword(username: String, newPassword: String, confirm: String): String? {
-        val u = username.trim().lowercase()
+        val u = canonicalLoginUsername(username)
         if (!knownUsername(u)) return "Unknown user."
         if (newPassword.length < 6) return "Use at least 6 characters."
         if (newPassword != confirm) return "Passwords do not match."

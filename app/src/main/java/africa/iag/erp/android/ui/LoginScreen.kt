@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,6 +54,8 @@ import africa.iag.erp.android.ui.theme.IagBrandLogo
 import africa.iag.erp.android.ui.theme.rememberStoreTick
 import africa.iag.erp.core.APP_NAME
 import africa.iag.erp.core.ErpStore
+import africa.iag.erp.core.UserNotice
+import africa.iag.erp.core.userNotice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,15 +65,29 @@ private val Ink = Color(0xFF18181B)
 private val Muted = Color(0xFF71717A)
 private val Field = Color(0xFFF4F4F5)
 private val Line = Color(0xFFE4E4E7)
-private val ErrorFill = Color(0xFFFFF1F2)
-private val ErrorText = Color(0xFFB91C1C)
+
+@Composable
+private fun NoticeDialog(notice: UserNotice?, onDismiss: () -> Unit) {
+    if (notice == null) return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(notice.title, fontWeight = FontWeight.SemiBold) },
+        text = { Text(notice.message) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("OK", color = Ink, fontWeight = FontWeight.SemiBold) }
+        },
+        containerColor = Color.White,
+        titleContentColor = Ink,
+        textContentColor = Ink,
+    )
+}
 
 @Composable
 fun LoginScreen(store: ErpStore, onSignedIn: () -> Unit) {
     rememberStoreTick(store)
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    var username by remember { mutableStateOf("admin") }
+    var password by remember { mutableStateOf("ChangeMe") }
+    var notice by remember { mutableStateOf<UserNotice?>(null) }
     var showReset by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -100,18 +117,27 @@ fun LoginScreen(store: ErpStore, onSignedIn: () -> Unit) {
     fun signInRemote() {
         if (busy) return
         if (username.trim().isEmpty() || password.isEmpty()) {
-            error = "Enter your username and password."
+            notice = userNotice("Enter your username and password.")
             return
         }
         busy = true
-        error = null
+        notice = null
         focusManager.clearFocus()
         scope.launch {
             val result = withContext(Dispatchers.IO) {
-                store.loginAsync(username, password)
+                if (password.length < 10) {
+                    store.loginOnThisDevice(username, password)
+                } else {
+                    val live = store.loginAsync(username, password)
+                    if (live == null || store.loginOnThisDevice(username, password) == null) null else live
+                }
             }
             busy = false
-            if (result != null) error = result else onSignedIn()
+            if (result == null) {
+                onSignedIn()
+            } else {
+                notice = userNotice(result)
+            }
         }
     }
 
@@ -195,18 +221,6 @@ fun LoginScreen(store: ErpStore, onSignedIn: () -> Unit) {
                 keyboardActions = KeyboardActions(onGo = { if (canSubmit) signInRemote() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(passwordFocus),
             )
-            if (error != null) {
-                Text(
-                    error!!,
-                    color = ErrorText,
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .fillMaxWidth()
-                        .background(ErrorFill, RoundedCornerShape(10.dp))
-                        .padding(12.dp),
-                )
-            }
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = { signInRemote() },
@@ -226,14 +240,21 @@ fun LoginScreen(store: ErpStore, onSignedIn: () -> Unit) {
                     Text("Sign in", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 }
             }
+            Text(
+                "On this phone, Sign in with admin / ChangeMe. Live IAG needs your web ERP password.",
+                color = Muted,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+            )
             TextButton(
                 onClick = {
-                    val result = store.login(username, password)
-                    if (result != null) error = result else onSignedIn()
+                    val result = store.loginOnThisDevice(username, password)
+                    if (result != null) notice = userNotice(result) else onSignedIn()
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Continue on this device", color = Muted, fontWeight = FontWeight.Medium)
+                Text("Continue on this device", color = Ink, fontWeight = FontWeight.SemiBold)
             }
         }
         Text(
@@ -244,6 +265,7 @@ fun LoginScreen(store: ErpStore, onSignedIn: () -> Unit) {
             modifier = Modifier.padding(bottom = 28.dp),
         )
     }
+    NoticeDialog(notice) { notice = null }
 }
 
 @Composable
@@ -251,9 +273,7 @@ fun ResetPasswordScreen(store: ErpStore, username: String, onBack: () -> Unit) {
     var user by remember { mutableStateOf(username) }
     var password by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
-    var done by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<UserNotice?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -283,22 +303,18 @@ fun ResetPasswordScreen(store: ErpStore, username: String, onBack: () -> Unit) {
         OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("New password on this device") }, visualTransformation = PasswordVisualTransformation(), shape = RoundedCornerShape(12.dp), colors = fieldColors, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(value = confirm, onValueChange = { confirm = it }, label = { Text("Confirm") }, visualTransformation = PasswordVisualTransformation(), shape = RoundedCornerShape(12.dp), colors = fieldColors, modifier = Modifier.fillMaxWidth())
-        if (error != null) Text(error!!, color = ErrorText, modifier = Modifier.padding(top = 12.dp))
-        if (notice != null) Text(notice!!, color = Muted, modifier = Modifier.padding(top = 8.dp))
-        if (done) Text("Password updated. Sign in with the new password.", color = Muted)
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = {
                 if (busy) return@Button
                 busy = true
-                error = null
                 notice = null
                 scope.launch {
                     val result = withContext(Dispatchers.IO) { store.requestFrontendPasswordReset(user) }
                     busy = false
-                    result.fold(
-                        onSuccess = { message -> notice = message },
-                        onFailure = { error = it.message },
+                    notice = result.fold(
+                        onSuccess = { UserNotice("Check your email", "If that account exists, we sent a reset link.") },
+                        onFailure = { UserNotice("Couldn't send email", "Try again in a moment, or save a password on this phone instead.") },
                     )
                 }
             },
@@ -311,12 +327,10 @@ fun ResetPasswordScreen(store: ErpStore, username: String, onBack: () -> Unit) {
         Button(
             onClick = {
                 val result = store.resetPassword(user, password, confirm)
-                if (result != null) {
-                    error = result
-                    done = false
+                notice = if (result != null) {
+                    userNotice(result)
                 } else {
-                    error = null
-                    done = true
+                    UserNotice("Password saved", "You can sign in on this phone with that password.")
                 }
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -325,4 +339,5 @@ fun ResetPasswordScreen(store: ErpStore, username: String, onBack: () -> Unit) {
         ) { Text("Save on this device") }
         TextButton(onClick = onBack) { Text("Back to sign in", color = Muted) }
     }
+    NoticeDialog(notice) { notice = null }
 }

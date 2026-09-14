@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import africa.iag.erp.android.R
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -88,6 +91,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -100,7 +104,7 @@ import africa.iag.erp.core.QuickActionKind
 import africa.iag.erp.core.SuiteApp
 import africa.iag.erp.core.WelcomeStat
 
-val IagCardShape = RoundedCornerShape(16.dp)
+val IagCardShape = RoundedCornerShape(22.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -189,8 +193,8 @@ fun SectionLabel(text: String, accessory: String? = null, onAccessory: (() -> Un
     Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.weight(1f))
@@ -251,58 +255,48 @@ fun GreetingBlock(name: String, subtitle: String) {
 
 @Composable
 fun WelcomeCard(name: String, subtitle: String, stats: List<WelcomeStat>) {
-    val onOrange = Color.White
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(IagCardShape)
-            .background(MaterialTheme.colorScheme.primary)
-            .padding(18.dp),
-    ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "${greetingLabel()}, $name",
-                    color = onOrange,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(subtitle, color = onOrange.copy(alpha = 0.82f), fontSize = 14.sp)
-            }
-            IagMonogram(36.dp)
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column {
+            Text(
+                greetingLabel(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                name,
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 15.sp)
         }
         if (stats.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(onOrange.copy(alpha = 0.14f))
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                stats.forEachIndexed { index, stat ->
-                    if (index > 0) {
-                        Box(
-                            Modifier
-                                .padding(horizontal = 8.dp)
-                                .width(1.dp)
-                                .height(28.dp)
-                                .background(onOrange.copy(alpha = 0.22f)),
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                stats.forEach { stat ->
+                    val hot = stat.id == "todo" && stat.value != "0"
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (hot) IagOrange.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface)
+                            .padding(vertical = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
                         Text(
                             stat.value,
-                            color = onOrange,
-                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            color = if (hot) IagOrange else MaterialTheme.colorScheme.onBackground,
                         )
                         Text(
                             stat.label,
-                            color = onOrange.copy(alpha = 0.78f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
                         )
                     }
                 }
@@ -408,20 +402,29 @@ fun IagListRow(
 }
 
 @Composable
-fun AppTile(app: SuiteApp, onClick: () -> Unit) {
+fun AppTile(app: SuiteApp, subtitle: String? = null, onClick: () -> Unit) {
     val color = app.color.toComposeColor()
-    IagCard(onClick = onClick) {
-        IconWell(suiteAppIcon(app.id), color)
-        Spacer(Modifier.height(14.dp))
-        Text(app.label, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            app.description,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 12.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(68.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Brush.linearGradient(listOf(color, color.copy(alpha = 0.72f)))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(suiteAppIcon(app.id), contentDescription = app.label, tint = Color.White, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(app.label, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1)
+        if (subtitle != null) {
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp, maxLines = 1)
+        }
     }
 }
 
@@ -498,23 +501,22 @@ fun quickActionIcon(id: String): ImageVector = when (id) {
 
 @Composable
 fun QuickActionButton(action: QuickAction, badge: Int = 0, onClick: () -> Unit) {
-    val color = MaterialTheme.colorScheme.primary
+    val color = action.color.toComposeColor()
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+            .width(76.dp)
+            .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(CircleShape)
-                    .background(color.copy(alpha = 0.12f)),
+                    .size(58.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(color.copy(alpha = 0.14f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(quickActionIcon(action.id), contentDescription = action.label, tint = color, modifier = Modifier.size(22.dp))
+                Icon(quickActionIcon(action.id), contentDescription = action.label, tint = color, modifier = Modifier.size(20.dp))
             }
             if (badge > 0) {
                 Text(
@@ -534,11 +536,65 @@ fun QuickActionButton(action: QuickAction, badge: Int = 0, onClick: () -> Unit) 
         Spacer(Modifier.height(8.dp))
         Text(
             action.label,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            maxLines = 2,
+            maxLines = 1,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
+    }
+}
+
+@Composable
+fun TodayActionCard(action: QuickAction, badge: Int = 0, onClick: () -> Unit) {
+    val color = action.color.toComposeColor()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(color.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box {
+            Icon(quickActionIcon(action.id), contentDescription = action.label, tint = color, modifier = Modifier.size(22.dp))
+            if (badge > 0) {
+                Text(
+                    if (badge > 9) "9+" else "$badge",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 14.dp, y = (-10).dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFB91C1C))
+                        .padding(horizontal = 5.dp, vertical = 1.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(action.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+@Composable
+fun QuickActionRail(
+    actions: List<QuickAction>,
+    pending: Int = 0,
+    onAction: (QuickAction) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        actions.forEach { action ->
+            QuickActionButton(
+                action = action,
+                badge = if (action.kind == QuickActionKind.APPROVALS) pending else 0,
+                onClick = { onAction(action) },
+            )
+        }
     }
 }
 

@@ -271,8 +271,16 @@ val demoAccounts: List<DemoAccount> = listOf(
     DemoAccount("approver", "Ava Approver", "Approver", "Notify only", "approver@iag.africa"),
 )
 
-fun demoAccountFor(username: String): DemoAccount? {
+fun canonicalLoginUsername(username: String): String {
     val u = username.trim().lowercase()
+    demoAccounts.firstOrNull { it.username == u || it.email.lowercase() == u }?.let { return it.username }
+    val local = u.substringBefore("@", missingDelimiterValue = "")
+    if (local.isNotEmpty() && demoAccounts.any { it.username == local }) return local
+    return u
+}
+
+fun demoAccountFor(username: String): DemoAccount? {
+    val u = canonicalLoginUsername(username)
     return demoAccounts.firstOrNull { it.username == u }
 }
 

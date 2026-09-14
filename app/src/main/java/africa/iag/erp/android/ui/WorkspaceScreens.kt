@@ -53,15 +53,17 @@ fun MoreScreen(
 ) {
     rememberStoreTick(store)
     LazyColumn(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-        item { SectionLabel("Apps") }
-        item {
-            IagGroupedCard {
-                IagListRow(onClick = onSwitchApp, divider = false) {
-                    DeskRow(
-                        title = "Switch app",
-                        subtitle = store.activeSuiteApp?.let { "You are in ${it.label}." } ?: "Open another IAG tool.",
-                        icon = Icons.Outlined.Apps,
-                    )
+        if (store.activeAppId != null) {
+            item { SectionLabel("Apps") }
+            item {
+                IagGroupedCard {
+                    IagListRow(onClick = onSwitchApp, divider = false) {
+                        DeskRow(
+                            title = "Switch app",
+                            subtitle = store.activeSuiteApp?.let { "You are in ${it.label}." } ?: "Open another IAG tool.",
+                            icon = Icons.Outlined.Apps,
+                        )
+                    }
                 }
             }
         }
@@ -317,5 +319,5 @@ private val erpQnA = listOf(
     "Where is Banking?" to "Home or Departments → Treasury → Banking. Features include bank accounts, transfers, statements, and reconciliations.",
     "Who can clock in?" to "Every signed-in login, including clerk, viewer, and contractor. You do not need the HR desk.",
     "Who can approve?" to "QS, Stores, Procurement, HR, HOD, PM, Accounts, GM, CEO, Finance, and Administrators. Clerk and Viewer cannot.",
-    "How do I sign in?" to "Use the same username and password as the web ERP. The old short demo login no longer works. To try the app offline, tap Forgot password, save a password, then Continue on this device.",
+    "How do I sign in?" to "The black Sign in button uses the live web ERP password (10+ characters). To try the app here, type admin and any password of 6+ characters, then tap Continue on this device.",
 )
