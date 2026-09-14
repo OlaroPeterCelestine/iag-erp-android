@@ -2,6 +2,14 @@ package africa.iag.erp.core
 
 const val STORE_KEY = "iag-erp-android-v1"
 
+/** Live accounts must use the web ERP password. The old short demo login is rejected after the first forced change. */
+fun describeLiveLoginFailure(password: String, apiMessage: String): String {
+    if (password.length < 10) {
+        return "The live workspace rejected this password. Use the same password as the web ERP (at least 10 characters) — not the old short demo login."
+    }
+    return apiMessage
+}
+
 class ErpStore(
     val modules: List<ErpModule> = erpModules(),
     private val persistence: KeyValueStore = MemoryKeyValueStore(),
@@ -541,6 +549,12 @@ class ErpStore(
                 notifyChange()
                 if (apiErr.isNetwork && passwords[u.lowercase()].isNullOrEmpty().not()) {
                     return@fold login(u, password, departmentId)
+                }
+                if (apiErr.isUnauthorized) {
+                    return@fold describeLiveLoginFailure(
+                        password,
+                        apiErr.message ?: "Invalid email/username or password.",
+                    )
                 }
                 apiErr.message
             },

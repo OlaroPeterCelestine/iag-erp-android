@@ -233,6 +233,12 @@ class ApiTest {
         s.seedTestPasswords("unit-test-login")
         assertEquals("Invalid email/username or password.", s.loginAsync("admin", "unit-test-login"))
         assertFalse(s.isSignedIn)
+
+        assertEquals(
+            describeLiveLoginFailure("shortpw", "Invalid email/username or password."),
+            s.loginAsync("admin", "shortpw"),
+        )
+        assertFalse(s.isSignedIn)
     }
 
     @Test

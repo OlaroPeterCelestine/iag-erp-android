@@ -135,7 +135,7 @@ fun IagBrandLogo(modifier: Modifier = Modifier, height: Dp = 128.dp, mono: Boole
     Image(
         painter = painterResource(if (mono) R.drawable.iag_logo_mono else R.drawable.iag_logo),
         contentDescription = "Inspire Africa Group",
-        modifier = modifier.fillMaxWidth().height(height),
+        modifier = modifier.height(height),
         contentScale = ContentScale.Fit,
     )
 }
